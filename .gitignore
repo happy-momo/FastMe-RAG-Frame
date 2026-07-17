@@ -48,28 +48,27 @@ test_res/
 *.log
 logs/
 
-# Environment
+# Environment variables (contains API keys)
 .env
 .env.local
 .env.*.local
 
-# Data
-data/chroma/
-data/faiss_index/
+# Data - vector store persistence (runtime generated)
 data/
-storage/
+
+# Model cache (large binary files, download at runtime)
+models/
+
+# User uploaded documents
+files/
+
+# Test artifacts
+__test_check__/
+
+# Database files
 *.db
 *.sqlite
 *.sqlite3
-
-# Model cache
-models/
-
-# Claude Code
-.claude/
-
-# Files directory (user uploaded documents)
-files/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -91,7 +90,7 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# Documentation
+# Documentation build
 docs/_build/
 
 # Temporary files
@@ -102,3 +101,6 @@ temp/
 # OS
 Thumbs.db
 .DS_Store
+
+# Claude Code
+.claude/
