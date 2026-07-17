@@ -55,6 +55,7 @@ logs/
 
 # Data
 data/chroma/
+data/faiss_index/
 data/
 storage/
 *.db
@@ -63,6 +64,9 @@ storage/
 
 # Model cache
 models/
+
+# Claude Code
+.claude/
 
 # Files directory (user uploaded documents)
 files/
