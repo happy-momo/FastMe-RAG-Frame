@@ -1,0 +1,48 @@
+# 字段标签配置
+# 支持多语言切换，用于格式化检索结果中的字段显示
+
+# 中文
+zh:
+  chunk_id: "片段 ID"
+  doc_id: "文档 ID"
+  doc_type: "文档类型"
+  source: "来源"
+  file_path: "文件路径"
+  device_id: "设备"
+  line_id: "产线"
+  fault_code: "故障码"
+  timestamp: "时间"
+  work_order_id: "工单号"
+  material_id: "物料号"
+  quality_result: "质检结果"
+  chapter_num: "章节号"
+  chapter_title: "章节标题"
+  device_model: "设备型号"
+  process_num: "工序号"
+  bom_items: "BOM 物料"
+  station: "工位"
+  process: "工序"
+  no_results: "没有检索到相关上下文信息"
+
+# English
+en:
+  chunk_id: "Chunk ID"
+  doc_id: "Document ID"
+  doc_type: "Document Type"
+  source: "Source"
+  file_path: "File Path"
+  device_id: "Device"
+  line_id: "Production Line"
+  fault_code: "Fault Code"
+  timestamp: "Timestamp"
+  work_order_id: "Work Order"
+  material_id: "Material"
+  quality_result: "Quality Result"
+  chapter_num: "Chapter"
+  chapter_title: "Chapter Title"
+  device_model: "Device Model"
+  process_num: "Process"
+  bom_items: "BOM Items"
+  station: "Station"
+  process: "Process"
+  no_results: "No relevant context found"

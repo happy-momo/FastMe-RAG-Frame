@@ -1,0 +1,44 @@
+# 元数据抽取规则配置
+# 每个字段支持多个正则 pattern，按顺序匹配，命中即停止
+
+device_id:
+  description: "设备 ID/设备编号"
+  patterns:
+    - "设备 ID[:：\\s]*([A-Za-z0-9_\\-]+)"
+    - "设备编号[:：\\s]*([A-Za-z0-9_\\-]+)"
+    - "\\b(EQ[-_]?\\d{3,})\\b"
+
+line_id:
+  description: "产线 ID/线体编号"
+  patterns:
+    - "产线[:：\\s]*([A-Za-z0-9_\\-]+)"
+    - "线体[:：\\s]*([A-Za-z0-9_\\-]+)"
+    - "\\b(LN[-_]?\\d{3,})\\b"
+
+fault_code:
+  description: "故障码/告警码"
+  patterns:
+    - "故障码[:：\\s]*([A-Za-z0-9_\\-]+)"
+    - "告警码[:：\\s]*([A-Za-z0-9_\\-]+)"
+    - "\\b(ERR[-_]?\\d{3,})\\b"
+
+work_order_id:
+  description: "工单 ID/工单编号"
+  patterns:
+    - "工单 ID[:：\\s]*([A-Za-z0-9_\\-]+)"
+    - "工单编号[:：\\s]*([A-Za-z0-9_\\-]+)"
+    - "\\b(WO[-_]?\\d{3,})\\b"
+
+material_id:
+  description: "物料 ID/物料编号"
+  patterns:
+    - "物料 ID[:：\\s]*([A-Za-z0-9_\\-]+)"
+    - "物料编号[:：\\s]*([A-Za-z0-9_\\-]+)"
+    - "\\b(MT[-_]?\\d{3,})\\b"
+    - "\\b(MAT[-_]?\\d{3,})\\b"
+
+# 可扩展更多字段...
+# timestamp:
+#   description: "时间戳"
+#   patterns:
+#     - "(\\d{4}[-/]\\d{1,2}[-/]\\d{1,2}\\s+\\d{1,2}:\\d{2}:\\d{2})"

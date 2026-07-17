@@ -1,0 +1,64 @@
+# 场景配置文件
+# 定义不同问答场景的路由规则和溯源字段映射
+
+scenes:
+  # 故障诊断场景 - 基于运维日志、故障记录
+  fault_diagnosis:
+    doc_type: log
+    prompt_template: fault_diagnosis
+    top_k: 5
+    source_fields:
+      - chunk_id
+      - doc_id
+      - doc_type
+      - device_id
+      - line_id
+      - fault_code
+      - timestamp
+      - source
+    description: "设备故障诊断 - 基于日志和故障记录分析"
+
+  # 设备手册查询场景 - 操作步骤、技术参数
+  manual_query:
+    doc_type: manual
+    prompt_template: manual_query
+    top_k: 5
+    source_fields:
+      - chunk_id
+      - doc_id
+      - doc_type
+      - source
+      - file_path
+      - chapter_num
+      - chapter_title
+      - device_model
+    description: "设备手册查询 - 操作步骤和技术参数"
+
+  # 工单追溯场景 - 生产记录、质检信息
+  work_order_trace:
+    doc_type: business
+    prompt_template: work_order_trace
+    top_k: 5
+    source_fields:
+      - chunk_id
+      - doc_id
+      - doc_type
+      - work_order_id
+      - material_id
+      - line_id
+      - station
+      - quality_result
+      - source
+    description: "工单追溯 - 生产记录和质检信息"
+
+  # 默认场景 - 通用知识查询
+  default:
+    doc_type: null
+    prompt_template: default
+    top_k: 5
+    source_fields:
+      - chunk_id
+      - doc_id
+      - doc_type
+      - source
+    description: "默认问答 - 通用知识查询"
