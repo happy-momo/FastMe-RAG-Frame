@@ -23,7 +23,7 @@ Example:
 import logging
 from typing import Dict, Optional, Generator, Tuple, List
 
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_classic.memory import ConversationBufferWindowMemory
 
 from core.models import FastMeSearchResult
@@ -158,6 +158,11 @@ class ChatPipeline:
         ]
 
         answer = self.llm.invoke(messages).content
+
+        # 处理空回答
+        if not answer or not answer.strip():
+            answer = "抱歉，未能生成有效回答，请尝试换一种方式提问。"
+            logger.warning(f"[问答] LLM 返回空回答，question='{question}'")
 
         # [必须] 问答完成信息
         answer_preview = answer[:100].replace('\n', '\\n') if answer else ""
@@ -332,35 +337,62 @@ class ChatPipeline:
 
         memory = self.memories[session_id]
 
-        # 加载历史对话
-        history = memory.load_memory_variables({})
-        history_messages = history.get("history", [])
-
-        # 构建带历史的 Prompt
-        if history_messages:
-            # 根据 max_turns 配置决定取多少条历史消息（每轮2条：Human + AI）
-            max_turns = self.memory_configs.get(session_id, 10)
-            max_history_messages = max_turns * 2
-            history_text = "\n".join([
-                f"{msg.type}: {msg.content}"
-                for msg in history_messages[-max_history_messages:]
-            ])
-            question_with_history = f"历史对话:\n{history_text}\n\n当前问题：{question}"
-        else:
-            question_with_history = question
-
-        # 执行对话（调用内部 chat 方法）
-        result = self.chat(
-            question=question_with_history,
+        # 1. 执行场景化检索
+        contexts, source_fields = self.scene_aware_retriever.retrieve(
+            question=question,
             scene=scene,
             filters=filters,
             top_k=top_k
         )
 
-        # 保存记忆
+        # 2. 格式化上下文
+        context_text = self.prompt_adapter._format_context(contexts, source_fields)
+
+        # 3. 获取场景配置和系统 Prompt
+        scene_config = self.scene_aware_retriever.scene_router.route(scene)
+        prompt_template_name = scene_config.get("prompt_template", "default")
+        system_prompt = self.prompt_adapter.get_system_prompt(prompt_template_name)
+
+        # 4. 加载历史对话，构建消息列表（消息列表方式，而非文本拼接）
+        history = memory.load_memory_variables({})
+        history_messages = history.get("history", [])
+
+        messages = [SystemMessage(content=system_prompt)]
+
+        # 插入历史消息（ConversationBufferWindowMemory 的 k 参数已自动限制窗口大小）
+        for msg in history_messages:
+            messages.append(msg)
+
+        # 添加当前用户消息
+        messages.append(HumanMessage(
+            content=f"用户问题：{question}\n\n检索到的上下文信息：{context_text}\n\n基于以上内容回答"
+        ))
+
+        # 5. 调用 LLM
+        answer = self.llm.invoke(messages).content
+
+        # 处理空回答
+        if not answer or not answer.strip():
+            answer = "抱歉，未能生成有效回答，请尝试换一种方式提问。"
+            logger.warning(f"[问答] LLM 返回空回答，question='{question}'")
+
+        # [必须] 问答完成信息
+        answer_preview = answer[:100].replace('\n', '\\n') if answer else ""
+        logger.info(f"[问答] 回答完成：answer 预览='{answer_preview}...', 溯源数={len(contexts)}")
+
+        # 6. 构建溯源信息
+        sources = self._build_sources(contexts, source_fields)
+
+        # 7. 保存记忆
         memory.save_context(
             {"input": question},
-            {"output": result["answer"]}
+            {"output": answer}
         )
 
-        return result
+        return {
+            "question": question,
+            "scene": scene,
+            "filters": filters,
+            "answer": answer,
+            "sources": sources
+        }
