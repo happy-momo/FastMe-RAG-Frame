@@ -93,14 +93,14 @@ rag = FastMeRAG()
 
 print_separator("文档入库")
 
-ingest_result = rag.ingest(
-    file_path="./files/your-file",
-    doc_type="manual",
-)
-print(f"  文档ID: {ingest_result.get('doc_id')}")
-print(f"  文件名: {ingest_result.get('file_name')}")
-print(f"  分块数: {ingest_result.get('chunks_count')}")
-print(f"  向量数: {ingest_result.get('vector_count')}")
+# ingest_result = rag.batch_ingest(
+#     folder_path="./files",
+#     doc_type="manual",
+# )
+# print(f"  文档ID: {ingest_result.get('doc_id')}")
+# print(f"  文件名: {ingest_result.get('file_name')}")
+# print(f"  分块数: {ingest_result.get('chunks_count')}")
+# print(f"  向量数: {ingest_result.get('vector_count')}")
 
 
 # ============================================================
@@ -111,7 +111,7 @@ print_separator("场景1: 基础单轮对话（manual_query 场景）")
 
 result1 = chat_with_retry(
     rag,
-    question="S7-300最多支持什么扩展？",
+    question="IED支持什么连接？",
     scene="manual_query",
     top_k=5
 )
@@ -129,19 +129,19 @@ SESSION_DEEP = "deep_dive_001"
 rag.create_memory(session_id=SESSION_DEEP, max_turns=5)
 
 # 第1轮：基础问题
-q2_1 = "S7-200 SMART 有哪些型号？"
+q2_1 = "IED如何激活？"
 print(f"  用户: {q2_1}")
 result2_1 = chat_with_retry(rag, question=q2_1, session_id=SESSION_DEEP, scene="manual_query")
 print_chat_result(result2_1, turn=1)
 
 # 第2轮：追问细节（依赖上一轮上下文）
-q2_2 = "它们之间有什么区别？"
+q2_2 = "与IEM激活之间有什么区别？"
 print(f"  用户: {q2_2}")
 result2_2 = chat_with_retry(rag, question=q2_2, session_id=SESSION_DEEP, scene="manual_query")
 print_chat_result(result2_2, turn=2)
 
 # 第3轮：继续追问（依赖前两轮上下文）
-q2_3 = "哪个型号的扩展能力最强？"
+q2_3 = "我应该先激活IEM还是IED？"
 print(f"  用户: {q2_3}")
 result2_3 = chat_with_retry(rag, question=q2_3, session_id=SESSION_DEEP, scene="manual_query")
 print_chat_result(result2_3, turn=3)
@@ -167,19 +167,19 @@ SESSION_SWITCH = "topic_switch_001"
 rag.create_memory(session_id=SESSION_SWITCH, max_turns=5)
 
 # 第1轮：话题A - 通信功能
-q3_1 = "S7-200 SMART 支持哪些通信协议？"
+q3_1 = "如何实现transformer？"
 print(f"  用户: {q3_1}")
 result3_1 = chat_with_retry(rag, question=q3_1, session_id=SESSION_SWITCH, scene="manual_query")
 print_chat_result(result3_1, turn=1)
 
 # 第2轮：话题B - 编程软件（完全不同的话题）
-q3_2 = "STEP 7-Micro/WIN SMART 的安装要求是什么？"
+q3_2 = "IEVD的硬件要求是什么？"
 print(f"  用户: {q3_2}")
 result3_2 = chat_with_retry(rag, question=q3_2, session_id=SESSION_SWITCH, scene="manual_query")
 print_chat_result(result3_2, turn=2)
 
 # 第3轮：回到话题A - 追问通信（测试记忆是否还记得话题A）
-q3_3 = "刚才提到的通信协议中，哪个最适合远距离传输？"
+q3_3 = "如何优化部署transformer模型到边缘设备？"
 print(f"  用户: {q3_3}")
 result3_3 = chat_with_retry(rag, question=q3_3, session_id=SESSION_SWITCH, scene="manual_query")
 print_chat_result(result3_3, turn=3)
@@ -188,6 +188,7 @@ print_chat_result(result3_3, turn=3)
 # ============================================================
 # 场景 4: 多轮对话 - 记忆窗口限制
 # max_turns=3，发送4轮对话，验证最早一轮是否被遗忘
+# 基于文档：西门子工业边缘快速入门指南
 # ============================================================
 
 print_separator("场景4: 记忆窗口限制（max_turns=3，发送4轮）")
@@ -195,20 +196,20 @@ print_separator("场景4: 记忆窗口限制（max_turns=3，发送4轮）")
 SESSION_WINDOW = "window_test_001"
 rag.create_memory(session_id=SESSION_WINDOW, max_turns=3)
 
-# 第1轮
-q4_1 = "S7-200 SMART 的 CPU 模块有哪些指示灯？"
+# 第1轮：西门子工业边缘基础概念
+q4_1 = "西门子工业边缘平台的主要组成部分有哪些？"
 print(f"  用户: {q4_1}")
 result4_1 = chat_with_retry(rag, question=q4_1, session_id=SESSION_WINDOW, scene="manual_query")
 print_chat_result(result4_1, turn=1)
 
-# 第2轮
-q4_2 = "RUN 指示灯亮代表什么状态？"
+# 第2轮：追问边缘设备的部署方式
+q4_2 = "如何在工业边缘设备上部署 Docker 容器？"
 print(f"  用户: {q4_2}")
 result4_2 = chat_with_retry(rag, question=q4_2, session_id=SESSION_WINDOW, scene="manual_query")
 print_chat_result(result4_2, turn=2)
 
-# 第3轮
-q4_3 = "ERR 指示灯闪烁说明什么问题？"
+# 第3轮：追问数据采集相关
+q4_3 = "工业边缘设备如何与 PLC 进行数据通信？"
 print(f"  用户: {q4_3}")
 result4_3 = chat_with_retry(rag, question=q4_3, session_id=SESSION_WINDOW, scene="manual_query")
 print_chat_result(result4_3, turn=3)
@@ -235,36 +236,37 @@ if memory4:
 # ============================================================
 # 场景 5: 多会话并行
 # 两个不同 session_id 各自独立记忆，互不干扰
+# 分别针对两个不同的文档进行提问
 # ============================================================
 
 print_separator("场景5: 多会话并行（独立记忆互不干扰）")
 
-SESSION_A = "parallel_A"
-SESSION_B = "parallel_B"
+SESSION_A = "parallel_A"  # 针对：工业边缘快速入门指南
+SESSION_B = "parallel_B"  # 针对：工业边缘设备异常检测教程
 rag.create_memory(session_id=SESSION_A, max_turns=3)
 rag.create_memory(session_id=SESSION_B, max_turns=3)
 
-# 会话A - 第1轮
-q5a_1 = "S7-200 SMART 的模拟量输入模块是什么型号？"
-print(f"  [会话A] 用户: {q5a_1}")
+# 会话A - 第1轮：关于西门子工业边缘平台
+q5a_1 = "西门子工业边缘平台的设备管理器有哪些功能？"
+print(f"  [会话A-边缘入门] 用户: {q5a_1}")
 result5a_1 = chat_with_retry(rag, question=q5a_1, session_id=SESSION_A, scene="manual_query")
 print_chat_result(result5a_1, turn=1)
 
-# 会话B - 第1轮（完全不同的话题）
-q5b_1 = "S7-200 SMART 的编程语言有哪些？"
-print(f"  [会话B] 用户: {q5b_1}")
+# 会话B - 第1轮：关于异常检测（不同文档）
+q5b_1 = "工业边缘设备异常检测系统使用了哪些机器学习算法？"
+print(f"  [会话B-异常检测] 用户: {q5b_1}")
 result5b_1 = chat_with_retry(rag, question=q5b_1, session_id=SESSION_B, scene="manual_query")
 print_chat_result(result5b_1, turn=1)
 
-# 会话A - 第2轮（追问自己的话题）
-q5a_2 = "这个模块的分辨率是多少？"
-print(f"  [会话A] 用户: {q5a_2}")
+# 会话A - 第2轮（追问边缘平台的话题）
+q5a_2 = "如何在设备管理器中配置数据采集任务？"
+print(f"  [会话A-边缘入门] 用户: {q5a_2}")
 result5a_2 = chat_with_retry(rag, question=q5a_2, session_id=SESSION_A, scene="manual_query")
 print_chat_result(result5a_2, turn=2)
 
-# 会话B - 第2轮（追问自己的话题）
-q5b_2 = "哪种编程语言最适合初学者？"
-print(f"  [会话B] 用户: {q5b_2}")
+# 会话B - 第2轮（追问异常检测的话题）
+q5b_2 = "异常检测模型训练时如何进行数据预处理？"
+print(f"  [会话B-异常检测] 用户: {q5b_2}")
 result5b_2 = chat_with_retry(rag, question=q5b_2, session_id=SESSION_B, scene="manual_query")
 print_chat_result(result5b_2, turn=2)
 
@@ -280,6 +282,58 @@ if mem_a and mem_b:
 
 
 # ============================================================
+# 场景 6: 跨文档知识检索
+# 测试系统是否能同时从两个文档中检索相关信息
+# ============================================================
+
+print_separator("场景6: 跨文档知识检索（同时涉及两个文档）")
+
+# 问题1：涉及两个文档的共同主题 - Docker 部署
+q6_1 = "两个文档中都提到了 Docker，请分别说明在边缘入门指南和异常检测教程中 Docker 的用途有什么不同？"
+print(f"  用户: {q6_1}")
+result6_1 = chat_with_retry(rag, question=q6_1, scene="manual_query", top_k=8)
+print_chat_result(result6_1)
+
+# 问题2：涉及数据采集和处理
+q6_2 = "西门子边缘平台的数据采集功能如何支持异常检测应用的数据需求？"
+print(f"  用户: {q6_2}")
+result6_2 = chat_with_retry(rag, question=q6_2, scene="manual_query", top_k=8)
+print_chat_result(result6_2)
+
+# 问题3：涉及系统架构
+q6_3 = "请对比西门子工业边缘平台的系统架构和异常检测系统的架构，它们有什么共同点？"
+print(f"  用户: {q6_3}")
+result6_3 = chat_with_retry(rag, question=q6_3, scene="manual_query", top_k=10)
+print_chat_result(result6_3)
+
+
+# ============================================================
+# 场景 7: 技术细节深度问答
+# 针对文档中的具体技术参数和操作步骤
+# ============================================================
+
+print_separator("场景7: 技术细节深度问答")
+
+# 关于边缘入门指南的技术细节
+q7_1 = "西门子工业边缘设备的最低硬件配置要求是什么？支持哪些操作系统？"
+print(f"  用户: {q7_1}")
+result7_1 = chat_with_retry(rag, question=q7_1, scene="manual_query")
+print_chat_result(result7_1)
+
+# 关于异常检测的技术细节
+q7_2 = "异常检测教程中使用的数据集是什么？数据集包含哪些特征字段？"
+print(f"  用户: {q7_2}")
+result7_2 = chat_with_retry(rag, question=q7_2, scene="manual_query")
+print_chat_result(result7_2)
+
+# 关于部署和配置
+q7_3 = "如何配置工业边缘设备与云端平台的连接？需要哪些网络设置？"
+print(f"  用户: {q7_3}")
+result7_3 = chat_with_retry(rag, question=q7_3, scene="manual_query")
+print_chat_result(result7_3)
+
+
+# ============================================================
 # 清理
 # ============================================================
 
@@ -290,3 +344,6 @@ print("  已清除所有会话记忆")
 
 print_separator("测试完成")
 print("  所有场景测试已执行完毕！")
+print("  测试文档：")
+print("    1. 西门子工业边缘快速入门指南+v2.2.0+.pdf")
+print("    2. 工业边缘设备异常检测完整教程：从数据到Docker部署.pdf")

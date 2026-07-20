@@ -26,22 +26,26 @@ class SopSplitter(BaseSplitter):
 
     尺寸限制：
     Size limits:
-    - 单个 chunk 最大字符数：max_chunk_size (默认 1000 字)
-      Max characters per chunk: max_chunk_size (default 1000)
+    - 单个 chunk 最大字符数：max_chunk_size (默认 800 字)
+      Max characters per chunk: max_chunk_size (default 800)
     - 超大工序会自动拆分为多个 sub-chunks
       Oversized process steps are automatically split into sub-chunks
 
     Args:
-        max_chunk_size: 单个 chunk 最大字符数，默认 1000 / Max characters per chunk, default 1000
+        max_chunk_size: 单个 chunk 最大字符数，默认 800 / Max characters per chunk, default 800
 
     Example:
-        >>> splitter = SopSplitter()  # 默认 1000 字 / Default 1000 chars
+        >>> splitter = SopSplitter()  # 默认 800 字 / Default 800 chars
         >>> splitter = SopSplitter(max_chunk_size=1200)  # 自定义 1200 字 / Custom 1200 chars
     """
 
-    def __init__(self, max_chunk_size: int = 1000):
-        # 调用基类构造函数
-        super().__init__(max_chunk_size)
+    # SOP 推荐 chunk 大小 / Recommended chunk size for SOPs
+    DEFAULT_MAX_CHUNK_SIZE = 800
+
+    def __init__(self, max_chunk_size: int = None):
+        # 调用基类构造函数，使用类默认值或传入值
+        # Call base constructor, use class default or provided value
+        super().__init__(max_chunk_size or self.DEFAULT_MAX_CHUNK_SIZE)
         # 工序编号匹配模式
         self.process_patterns = [
             # 工序 X、第 X 工序

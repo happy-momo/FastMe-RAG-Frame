@@ -21,22 +21,26 @@ class LogSplitter(BaseSplitter):
 
     尺寸限制：
     Size limits:
-    - 单个 chunk 最大字符数：max_chunk_size (默认 1000 字)
-      Max characters per chunk: max_chunk_size (default 1000)
+    - 单个 chunk 最大字符数：max_chunk_size (默认 600 字)
+      Max characters per chunk: max_chunk_size (default 600)
     - 超大日志条目会自动拆分为多个 sub-chunks
       Oversized log entries are automatically split into sub-chunks
 
     Args:
-        max_chunk_size: 单个 chunk 最大字符数，默认 1000 / Max characters per chunk, default 1000
+        max_chunk_size: 单个 chunk 最大字符数，默认 600 / Max characters per chunk, default 600
 
     Example:
-        >>> splitter = LogSplitter()  # 默认 1000 字 / Default 1000 chars
+        >>> splitter = LogSplitter()  # 默认 600 字 / Default 600 chars
         >>> splitter = LogSplitter(max_chunk_size=500)  # 自定义 500 字 / Custom 500 chars
     """
 
-    def __init__(self, max_chunk_size: int = 1000):
-        # 调用基类构造函数
-        super().__init__(max_chunk_size)
+    # 日志推荐 chunk 大小 / Recommended chunk size for logs
+    DEFAULT_MAX_CHUNK_SIZE = 600
+
+    def __init__(self, max_chunk_size: int = None):
+        # 调用基类构造函数，使用类默认值或传入值
+        # Call base constructor, use class default or provided value
+        super().__init__(max_chunk_size or self.DEFAULT_MAX_CHUNK_SIZE)
         # 时间戳匹配：只匹配行首的时间戳部分，允许后面跟日志内容
         # 支持：2024-01-15 10:30:00、2024/01/15 10:30:00.123 等格式
         # 不要求时间戳独占一行，实际日志通常为 "2024-01-15 10:30:00 ERROR: ..."

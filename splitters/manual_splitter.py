@@ -28,22 +28,26 @@ class ManualSplitter(BaseSplitter):
 
     尺寸限制：
     Size limits:
-    - 单个 chunk 最大字符数：max_chunk_size (默认 1000 字)
-      Max characters per chunk: max_chunk_size (default 1000)
+    - 单个 chunk 最大字符数：max_chunk_size (默认 1500 字)
+      Max characters per chunk: max_chunk_size (default 1500)
     - 超大章节会自动拆分为多个 sub-chunks
       Oversized chapters are automatically split into sub-chunks
 
     Args:
-        max_chunk_size: 单个 chunk 最大字符数，默认 1000 / Max characters per chunk, default 1000
+        max_chunk_size: 单个 chunk 最大字符数，默认 1500 / Max characters per chunk, default 1500
 
     Example:
-        >>> splitter = ManualSplitter()  # 默认 1000 字 / Default 1000 chars
-        >>> splitter = ManualSplitter(max_chunk_size=1500)  # 自定义 1500 字 / Custom 1500 chars
+        >>> splitter = ManualSplitter()  # 默认 1500 字 / Default 1500 chars
+        >>> splitter = ManualSplitter(max_chunk_size=2000)  # 自定义 2000 字 / Custom 2000 chars
     """
 
-    def __init__(self, max_chunk_size: int = 1000):
-        # 调用基类构造函数
-        super().__init__(max_chunk_size)
+    # 手册推荐 chunk 大小 / Recommended chunk size for manuals
+    DEFAULT_MAX_CHUNK_SIZE = 1500
+
+    def __init__(self, max_chunk_size: int = None):
+        # 调用基类构造函数，使用类默认值或传入值
+        # Call base constructor, use class default or provided value
+        super().__init__(max_chunk_size or self.DEFAULT_MAX_CHUNK_SIZE)
         # 章节标题匹配模式（支持中英文多种格式）
         self.chapter_patterns = [
             # 中文格式：第 X 章、第 X 节（允许中文数字与章节字之间有空格）
