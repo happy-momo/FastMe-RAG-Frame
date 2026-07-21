@@ -12,9 +12,8 @@ FastMe RAG 框架多轮对话测试脚本
 9. FAISS 向量库去重验证 —— 验证修复：FAISS ids 去重
 
 测试文档：
-- 200smart知识点节选.pdf（S7-300/400/200Smart PLC 知识点）
-- T-CPU.docx（T-CPU 运动控制实验报告）
-- 博途wincc.pdf（WinCC 组态知识）
+- 西门子工业边缘快速入门指南+v2.2.0+.pdf（西门子工业边缘计算入门知识）
+- 工业边缘设备异常检测完整教程：从数据到 Docker 部署.pdf（边缘设备异常检测实践）
 """
 
 import time
@@ -145,7 +144,7 @@ SESSION_DEEP = "deep_dive_001"
 rag.create_memory(session_id=SESSION_DEEP, max_turns=5)
 
 # 第1轮：基础问题
-q2_1 = "wincc 如何安装？"
+q2_1 = "西门子工业边缘如何安装？"
 print(f"  用户: {q2_1}")
 result2_1 = chat_with_retry(rag, question=q2_1, session_id=SESSION_DEEP, scene="manual_query")
 print_chat_result(result2_1, turn=1)
@@ -157,7 +156,7 @@ result2_2 = chat_with_retry(rag, question=q2_2, session_id=SESSION_DEEP, scene="
 print_chat_result(result2_2, turn=2)
 
 # 第3轮：继续追问（依赖前两轮上下文）
-q2_3 = "wincc如何使用项目？"
+q2_3 = "工业边缘如何使用应用？"
 print(f"  用户: {q2_3}")
 result2_3 = chat_with_retry(rag, question=q2_3, session_id=SESSION_DEEP, scene="manual_query")
 print_chat_result(result2_3, turn=3)
@@ -181,7 +180,7 @@ for turn_idx, (turn_label, turn_result) in enumerate([
     if has_history_prefix:
         print(f"  [✗ 第{turn_idx}轮] question 字段包含历史对话文本！问题前缀: {q[:50]}...")
     else:
-        original_questions = ["wincc 如何安装？", "Wincc使用入门是什么？", "wincc如何使用项目？"]
+        original_questions = ["西门子工业边缘如何安装？", "工业边缘使用入门是什么？", "工业边缘如何使用应用？"]
         expected = original_questions[turn_idx - 1]
         if q == expected:
             print(f"  [✓ 第{turn_idx}轮] question 字段正确，仅包含原始问题")
@@ -202,19 +201,19 @@ SESSION_SWITCH = "topic_switch_001"
 rag.create_memory(session_id=SESSION_SWITCH, max_turns=5)
 
 # 第1轮：话题A - 通信功能
-q3_1 = "200smart有哪些模块？"
+q3_1 = "工业边缘有哪些部署模式？"
 print(f"  用户: {q3_1}")
 result3_1 = chat_with_retry(rag, question=q3_1, session_id=SESSION_SWITCH, scene="manual_query")
 print_chat_result(result3_1, turn=1)
 
 # 第2轮：话题B - 编程软件（完全不同的话题）
-q3_2 = "wincc如何进行组态？"
+q3_2 = "边缘设备如何进行应用开发？"
 print(f"  用户: {q3_2}")
 result3_2 = chat_with_retry(rag, question=q3_2, session_id=SESSION_SWITCH, scene="manual_query")
 print_chat_result(result3_2, turn=2)
 
 # 第3轮：回到话题A - 追问通信（测试记忆是否还记得话题A）
-q3_3 = "200smart模块支持什么通讯？"
+q3_3 = "工业边缘支持什么通信协议？"
 print(f"  用户: {q3_3}")
 result3_3 = chat_with_retry(rag, question=q3_3, session_id=SESSION_SWITCH, scene="manual_query")
 print_chat_result(result3_3, turn=3)
@@ -223,7 +222,7 @@ print_chat_result(result3_3, turn=3)
 # ============================================================
 # 场景 4: 多轮对话 - 记忆窗口限制
 # max_turns=3，发送4轮对话，验证最早一轮是否被遗忘
-# 基于文档：200smart知识点节选（S7-300/400/200Smart PLC）
+# 基于文档：西门子工业边缘快速入门指南
 # ============================================================
 
 print_separator("场景4: 记忆窗口限制（max_turns=3，发送4轮）")
@@ -231,20 +230,20 @@ print_separator("场景4: 记忆窗口限制（max_turns=3，发送4轮）")
 SESSION_WINDOW = "window_test_001"
 rag.create_memory(session_id=SESSION_WINDOW, max_turns=3)
 
-# 第1轮：S7-300 基础结构
-q4_1 = "S7-300 的硬件结构由哪些组件组成？"
+# 第 1 轮：工业边缘系统架构
+q4_1 = "工业边缘的系统架构由哪些组件组成？"
 print(f"  用户: {q4_1}")
 result4_1 = chat_with_retry(rag, question=q4_1, session_id=SESSION_WINDOW, scene="manual_query")
 print_chat_result(result4_1, turn=1)
 
 # 第2轮：追问安装与维护
-q4_2 = "S7-300 水平安装和垂直安装的允许温度分别是多少？"
+q4_2 = "工业边缘设备运行的允许温度范围是多少？"
 print(f"  用户: {q4_2}")
 result4_2 = chat_with_retry(rag, question=q4_2, session_id=SESSION_WINDOW, scene="manual_query")
 print_chat_result(result4_2, turn=2)
 
 # 第3轮：追问存储器相关
-q4_3 = "S7-300 断电后数据如何保存？MMC 卡的作用是什么？"
+q4_3 = "工业边缘设备断电后数据如何保存？存储卡的作用是什么？"
 print(f"  用户: {q4_3}")
 result4_3 = chat_with_retry(rag, question=q4_3, session_id=SESSION_WINDOW, scene="manual_query")
 print_chat_result(result4_3, turn=3)
@@ -272,8 +271,8 @@ if memory4:
     # 第4轮对话时，第1轮应已被淘汰，LLM 不应记得第1轮的问题
     print(f"\n  [修复验证 - 记忆窗口] 检查第4轮回答是否已遗忘第1轮内容...")
     answer4_text = result4_4['answer']
-    first_question_keyword = "硬件结构"
-    if first_question_keyword in answer4_text and "导轨" in answer4_text:
+    first_question_keyword = "系统架构"
+    if first_question_keyword in answer4_text and "组件" in answer4_text:
         # LLM 可能通过检索上下文获取到相关信息，需区分"检索到"和"从历史记忆到"
         # 更可靠的验证：检查记忆中实际保存的消息条数
         print(f"  [注意] LLM 回答中包含了第1轮关键词，但可能来自检索而非记忆")
@@ -294,32 +293,32 @@ if memory4:
 
 print_separator("场景5: 多会话并行（独立记忆互不干扰）")
 
-SESSION_A = "parallel_A"  # 针对：200smart知识点节选（PLC）
-SESSION_B = "parallel_B"  # 针对：T-CPU实验报告（运动控制）
+SESSION_A = "parallel_A"  # 针对：西门子工业边缘快速入门指南
+SESSION_B = "parallel_B"  # 针对：工业边缘设备异常检测教程
 rag.create_memory(session_id=SESSION_A, max_turns=3)
 rag.create_memory(session_id=SESSION_B, max_turns=3)
 
-# 会话A - 第1轮：关于 S7-200 Smart PLC
-q5a_1 = "S7-200 Smart 有哪些亮点和特色功能？"
-print(f"  [会话A-PLC] 用户: {q5a_1}")
+# 会话 A - 第 1 轮：关于西门子工业边缘
+q5a_1 = "西门子工业边缘有哪些亮点和特色功能？"
+print(f"  [会话 A-边缘] 用户：{q5a_1}")
 result5a_1 = chat_with_retry(rag, question=q5a_1, session_id=SESSION_A, scene="manual_query")
 print_chat_result(result5a_1, turn=1)
 
-# 会话B - 第1轮：关于 T-CPU 运动控制（不同文档）
-q5b_1 = "T-CPU 实验中驱动组态与优化的步骤是什么？"
-print(f"  [会话B-运动控制] 用户: {q5b_1}")
+# 会话 B - 第 1 轮：关于边缘设备异常检测（不同文档）
+q5b_1 = "边缘设备异常检测的完整流程是什么？"
+print(f"  [会话 A-边缘] 用户：{q5a_1}")
 result5b_1 = chat_with_retry(rag, question=q5b_1, session_id=SESSION_B, scene="manual_query")
 print_chat_result(result5b_1, turn=1)
 
-# 会话A - 第2轮（追问 PLC 通信的话题）
-q5a_2 = "S7-200 Smart 的以太网通信支持哪些协议？连接资源有多少？"
-print(f"  [会话A-PLC] 用户: {q5a_2}")
+# 会话 A - 第 2 轮（追问边缘通信的话题）
+q5a_2 = "工业边缘的以太网通信支持哪些协议？连接能力如何？"
+print(f"  [会话 A-边缘] 用户：{q5a_2}")
 result5a_2 = chat_with_retry(rag, question=q5a_2, session_id=SESSION_A, scene="manual_query")
 print_chat_result(result5a_2, turn=2)
 
-# 会话B - 第2轮（追问运动控制选型的话题）
-q5b_2 = "TIA Selection Tools 中 1500T 选型时如何配置运动控制参数？"
-print(f"  [会话B-运动控制] 用户: {q5b_2}")
+# 会话 A - 第 2 轮（追问边缘通信的话题）
+q5b_2 = "边缘设备异常检测中如何配置数据采集和模型参数？"
+print(f"  [会话 B-异常检测] 用户：{q5b_2}")
 result5b_2 = chat_with_retry(rag, question=q5b_2, session_id=SESSION_B, scene="manual_query")
 print_chat_result(result5b_2, turn=2)
 
@@ -341,20 +340,20 @@ if mem_a and mem_b:
 
 print_separator("场景6: 跨文档知识检索（同时涉及多个文档）")
 
-# 问题1：涉及 PLC 和运动控制的共同主题 - 通信
-q6_1 = "S7-200 Smart 的 PROFINET 通信和 T-CPU 的 V90 PN 驱动通信有什么关联？两者分别如何实现网络连接？"
+# 问题 1：涉及边缘计算和异常检测的共同主题 - 通信
+q6_1 = "西门子工业边缘的 PROFINET 通信和边缘设备异常检测的数据采集有什么关联？两者如何实现工业网络连接？"
 print(f"  用户: {q6_1}")
 result6_1 = chat_with_retry(rag, question=q6_1, scene="manual_query", top_k=8)
 print_chat_result(result6_1)
 
-# 问题2：涉及 WinCC 和 PLC 的主题 - 项目创建与组态
-q6_2 = "博途 WinCC 的项目创建和 S7-300 的硬件组态有什么共同点？它们在 TIA Portal 中如何集成？"
+# 问题 2：涉及边缘应用和数据采集的主题 - 应用开发与集成
+q6_2 = "工业边缘应用开发和边缘设备数据采集有什么共同点？它们在西门子工业边缘平台中如何集成？"
 print(f"  用户: {q6_2}")
 result6_2 = chat_with_retry(rag, question=q6_2, scene="manual_query", top_k=8)
 print_chat_result(result6_2)
 
 # 问题3：涉及三个文档 - 整体自动化系统架构
-q6_3 = "请结合三个文档的内容，描述一个完整的自动化项目可能涉及的技术栈：从PLC选型（200smart知识点）、运动控制（T-CPU实验）到上位机监控（WinCC），各部分如何协作？"
+q6_3 = "请结合两个文档的内容，描述一个完整的工业边缘项目可能涉及的技术栈：从边缘设备选型（工业边缘快速入门）、异常检测应用（边缘设备异常检测教程）到 Docker 部署，各部分如何协作？"
 print(f"  用户: {q6_3}")
 result6_3 = chat_with_retry(rag, question=q6_3, scene="manual_query", top_k=10)
 print_chat_result(result6_3)
@@ -367,20 +366,20 @@ print_chat_result(result6_3)
 
 print_separator("场景7: 技术细节深度问答")
 
-# 关于 200smart 的技术细节
-q7_1 = "S7-200 Smart 的高速计数器 HSC 最多可以使用几个？运动控制最多同时控制几个被控对象？PID 最多支持几路控制回路？"
+# 关于工业边缘设备的技术细节
+q7_1 = "工业边缘设备支持哪些通信接口？边缘应用最多可以同时运行几个？数据采集支持多少路传感器输入？"
 print(f"  用户: {q7_1}")
 result7_1 = chat_with_retry(rag, question=q7_1, scene="manual_query")
 print_chat_result(result7_1)
 
-# 关于 T-CPU 实验的技术细节
-q7_2 = "1500T 选型实验中，运动控制周期设置为多少？轴类型配置了哪些？通信负载和主循环OB时间分别是多少？"
+# 关于边缘设备异常检测的技术细节
+q7_2 = "边缘设备异常检测中，数据采集周期设置为多少？使用了哪些机器学习算法？Docker 容器资源和部署时间分别是多少？"
 print(f"  用户: {q7_2}")
 result7_2 = chat_with_retry(rag, question=q7_2, scene="manual_query")
 print_chat_result(result7_2)
 
-# 关于 WinCC 组态的技术细节
-q7_3 = "WinCC 的报警系统由哪些组成部分？报警日志需要什么外部存储介质？数据日志的采集模式有哪些？"
+# 关于工业边缘报警系统的技术细节
+q7_3 = "工业边缘的报警系统由哪些组成部分？边缘应用部署需要什么容器环境？数据采集的模式有哪些？"
 print(f"  用户: {q7_3}")
 result7_3 = chat_with_retry(rag, question=q7_3, scene="manual_query")
 print_chat_result(result7_3)
@@ -507,6 +506,5 @@ print("  已清除所有会话记忆")
 print_separator("测试完成")
 print("  所有场景测试已执行完毕！")
 print("  测试文档：")
-print("    1. 200smart知识点节选.pdf（S7-300/400/200Smart PLC 知识点）")
-print("    2. T-CPU.docx（T-CPU 运动控制实验报告）")
-print("    3. 博途wincc.pdf（WinCC 组态知识）")
+print("    1. 西门子工业边缘快速入门指南+v2.2.0+.pdf（西门子工业边缘计算入门知识）")
+print("    2. 工业边缘设备异常检测完整教程：从数据到 Docker 部署.pdf（边缘设备异常检测实践）")
