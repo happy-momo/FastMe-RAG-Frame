@@ -331,45 +331,127 @@ class FastMeRAG:
         从环境变量加载配置，如果环境变量不存在则使用默认配置
         Load configuration from environment variables, use default if not set
 
-        优先级 / Priority:
-        1. FASTME_CONFIG 环境变量指向的配置文件
-        2. 单独的环境变量（EMBEDDING_MODEL, LLM_MODEL 等）
+        分层配置优先级（从高到低）:
+        1. FASTME_CONFIG 环境变量指向的 YAML 配置文件（基础配置）
+        2. 环境变量覆盖层（FASTME_EMBEDDING_MODEL 等，覆盖 YAML 中的值）
         3. 默认配置
 
         Returns:
             配置字典 / Configuration dictionary
         """
-        # 检查是否有 FASTME_CONFIG 环境变量
-        # Check if FASTME_CONFIG environment variable exists
+        # 1. 加载 YAML 基础配置（如果 FASTME_CONFIG 存在）
         config_path = os.getenv("FASTME_CONFIG")
         if config_path:
-            logger.info(f"[FastMeRAG] 从配置文件加载: {config_path}")
-            return ConfigLoader.load(config_path)
+            logger.info(f"[FastMeRAG] 从配置文件加载：{config_path}")
+            yaml_config = ConfigLoader.load(config_path)
+        else:
+            logger.info("[FastMeRAG] 无配置文件，使用默认配置")
+            yaml_config = self.DEFAULT_CONFIG.copy()
 
-        # 检查是否有必要的环境变量配置（支持 FASTME_ 前缀和无前缀别名）
-        # Check if required environment variables are set (supports FASTME_ prefix and alias)
-        embedding_model = (
-            os.getenv("FASTME_EMBEDDING_MODEL") or
-            os.getenv("EMBEDDING_MODEL")
+        # 2. 构建环境变量覆盖配置
+        env_override = self._build_env_override_config()
+
+        # 3. 合并配置：环境变量覆盖 YAML 配置
+        if env_override:
+            logger.info("[FastMeRAG] 应用环境变量覆盖")
+            config = ConfigLoader._deep_merge(yaml_config, env_override)
+        else:
+            config = yaml_config
+
+        return config
+
+    def _build_env_override_config(self) -> Optional[Dict[str, Any]]:
+        """
+        从环境变量构建覆盖配置
+        Build override config from environment variables
+
+        支持的环境变量:
+        - FASTME_EMBEDDING_MODEL / EMBEDDING_MODEL: Embedding 模型名称
+        - FASTME_MODEL_CACHE_DIR / MODEL_CACHE_DIR: 模型缓存目录
+        - FASTME_LLM_MODEL / LLM_MODEL: LLM 模型名称
+        - FASTME_LLM_BASE_URL / LLM_BASE_URL: LLM API 地址
+        - FASTME_LLM_API_KEY / LLM_API_KEY: LLM API Key
+        - FASTME_VECTOR_STORE_TYPE: 向量库类型
+        - FASTME_CHROMA_PERSIST_DIR / CHROMA_DIR: Chroma 持久化目录
+        - FASTME_CHROMA_COLLECTION / CHROMA_COLLECTION: Chroma 集合名称
+        - FASTME_FAISS_INDEX_PATH / FAISS_INDEX_PATH: FAISS 索引路径
+        - FASTME_LANGUAGE: 语言设置
+        - FASTME_LOG_LEVEL: 日志级别
+
+        Returns:
+            覆盖配置字典，如果没有设置任何环境变量则返回 None
+        """
+        override: Dict[str, Any] = {}
+
+        # Embedding 配置覆盖
+        embedding_model = os.getenv("FASTME_EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL")
+        if embedding_model:
+            override["embedding"] = {"model_name": embedding_model}
+
+        model_cache_dir = os.getenv("FASTME_MODEL_CACHE_DIR") or os.getenv("MODEL_CACHE_DIR")
+        if model_cache_dir:
+            if "embedding" not in override:
+                override["embedding"] = {}
+            override["embedding"]["cache_dir"] = model_cache_dir
+
+        # LLM 配置覆盖
+        llm_model = os.getenv("FASTME_LLM_MODEL") or os.getenv("LLM_MODEL")
+        if llm_model:
+            override["llm"] = {"model_name": llm_model}
+
+        llm_base_url = os.getenv("FASTME_LLM_BASE_URL") or os.getenv("LLM_BASE_URL")
+        if llm_base_url:
+            if "llm" not in override:
+                override["llm"] = {}
+            override["llm"]["base_url"] = llm_base_url
+
+        llm_api_key = os.getenv("FASTME_LLM_API_KEY") or os.getenv("LLM_API_KEY")
+        if llm_api_key:
+            if "llm" not in override:
+                override["llm"] = {}
+            override["llm"]["api_key"] = llm_api_key
+
+        # 向量库配置覆盖
+        vector_store_type = os.getenv("FASTME_VECTOR_STORE_TYPE")
+        if vector_store_type:
+            override["vector_store"] = {"type": vector_store_type, "config": {}}
+
+        chroma_persist_dir = (
+            os.getenv("FASTME_CHROMA_PERSIST_DIR") or
+            os.getenv("CHROMA_PERSIST_DIR") or
+            os.getenv("CHROMA_DIR")
         )
-        llm_model = (
-            os.getenv("FASTME_LLM_MODEL") or
-            os.getenv("LLM_MODEL")
-        )
+        if chroma_persist_dir:
+            if "vector_store" not in override:
+                override["vector_store"] = {"type": "chroma", "config": {}}
+            override["vector_store"]["config"]["persist_directory"] = chroma_persist_dir
 
-        if embedding_model or llm_model:
-            # 有环境变量配置，从环境变量构建配置
-            # Environment variables set, build config from env
-            logger.info("[FastMeRAG] 从环境变量加载配置")
-            return self._build_config_from_env()
+        chroma_collection = os.getenv("FASTME_CHROMA_COLLECTION") or os.getenv("CHROMA_COLLECTION")
+        if chroma_collection:
+            if "vector_store" not in override:
+                override["vector_store"] = {"type": "chroma", "config": {}}
+            override["vector_store"]["config"]["collection_name"] = chroma_collection
 
-        # 没有环境变量配置，使用默认配置
-        # No environment variables, use default config
-        logger.info("[FastMeRAG] 使用默认配置")
-        return self.DEFAULT_CONFIG.copy()
+        faiss_index_path = os.getenv("FASTME_FAISS_INDEX_PATH") or os.getenv("FAISS_INDEX_PATH")
+        if faiss_index_path:
+            if "vector_store" not in override:
+                override["vector_store"] = {"type": "faiss", "config": {}}
+            override["vector_store"]["config"]["index_path"] = faiss_index_path
+
+        # 其他配置覆盖
+        language = os.getenv("FASTME_LANGUAGE")
+        if language:
+            override["language"] = language
+
+        log_level = os.getenv("FASTME_LOG_LEVEL")
+        if log_level:
+            override["log_level"] = log_level
+
+        return override if override else None
 
     @staticmethod
     def _build_config_from_env() -> Dict[str, Any]:
+
         """
         从环境变量构建配置
         Build configuration from environment variables
