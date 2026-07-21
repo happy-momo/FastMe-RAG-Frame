@@ -160,10 +160,10 @@ llm:
         Test configuration validation - missing embedding
         """
         config = {
-            'vector_store': {'type': 'chroma', 'config': {}},
+            'vector_store': {'type': 'chroma', 'config': {'persist_directory': './data/chroma'}},
             'llm': {'model_name': 'qwen-plus'}
         }
-        
+
         with pytest.raises(ValueError, match="Missing required config: 'embedding'"):
             ConfigLoader._validate_config(config)
 
@@ -173,11 +173,78 @@ llm:
         Test configuration validation - missing llm
         """
         config = {
-            'vector_store': {'type': 'chroma', 'config': {}},
+            'vector_store': {'type': 'chroma', 'config': {'persist_directory': './data/chroma'}},
             'embedding': {'model_name': 'BAAI/bge-m3'}
         }
-        
+
         with pytest.raises(ValueError, match="Missing required config: 'llm'"):
+            ConfigLoader._validate_config(config)
+
+    def test_validate_vector_store_missing_config(self):
+        """
+        测试配置验证 - 向量库缺少必要配置
+        Test configuration validation - vector store missing required config
+        """
+        # Chroma 缺少 persist_directory
+        config = {
+            'vector_store': {'type': 'chroma', 'config': {}},
+            'embedding': {'model_name': 'BAAI/bge-m3'},
+            'llm': {'model_name': 'qwen-plus'}
+        }
+
+        with pytest.raises(ValueError, match="Chroma vector store requires 'persist_directory'"):
+            ConfigLoader._validate_config(config)
+
+        # FAISS 缺少 index_path
+        config = {
+            'vector_store': {'type': 'faiss', 'config': {}},
+            'embedding': {'model_name': 'BAAI/bge-m3'},
+            'llm': {'model_name': 'qwen-plus'}
+        }
+
+        with pytest.raises(ValueError, match="FAISS vector store requires 'index_path'"):
+            ConfigLoader._validate_config(config)
+
+    def test_validate_llm_temperature_range(self):
+        """
+        测试配置验证 - LLM temperature 范围
+        Test configuration validation - LLM temperature range
+        """
+        config = {
+            'vector_store': {'type': 'chroma', 'config': {'persist_directory': './data/chroma'}},
+            'embedding': {'model_name': 'BAAI/bge-m3'},
+            'llm': {'model_name': 'qwen-plus', 'temperature': 2.5}  # 超出范围
+        }
+
+        with pytest.raises(ValueError, match="Invalid 'llm.temperature'"):
+            ConfigLoader._validate_config(config)
+
+    def test_validate_chunking_config(self):
+        """
+        测试配置验证 - Chunking 配置
+        Test configuration validation - Chunking configuration
+        """
+        # 有效的 chunking 配置
+        config = {
+            'vector_store': {'type': 'chroma', 'config': {'persist_directory': './data/chroma'}},
+            'embedding': {'model_name': 'BAAI/bge-m3'},
+            'llm': {'model_name': 'qwen-plus'},
+            'chunking': {
+                'default_max_size': 1000,
+                'by_type': {'log': 600, 'manual': 1500}
+            }
+        }
+        ConfigLoader._validate_config(config)  # 不应抛出异常
+
+        # 无效的 default_max_size
+        config = {
+            'vector_store': {'type': 'chroma', 'config': {'persist_directory': './data/chroma'}},
+            'embedding': {'model_name': 'BAAI/bge-m3'},
+            'llm': {'model_name': 'qwen-plus'},
+            'chunking': {'default_max_size': -100}
+        }
+
+        with pytest.raises(ValueError, match="Invalid 'chunking.default_max_size'"):
             ConfigLoader._validate_config(config)
 
     def test_deep_merge(self):
@@ -222,14 +289,15 @@ llm:
         Test loading configuration from dictionary
         """
         config_dict = {
-            'vector_store': {'type': 'chroma', 'config': {}},
+            'vector_store': {'type': 'chroma', 'config': {'persist_directory': './data/chroma_test'}},
             'embedding': {'model_name': 'BAAI/bge-m3'},
             'llm': {'model_name': 'qwen-plus'}
         }
-        
+
         config = ConfigLoader.from_dict(config_dict)
-        
+
         assert config['vector_store']['type'] == 'chroma'
+        assert config['vector_store']['config']['persist_directory'] == './data/chroma_test'
         assert config['embedding']['model_name'] == 'BAAI/bge-m3'
 
     def test_load_with_overrides(self):

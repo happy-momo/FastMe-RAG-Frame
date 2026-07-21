@@ -207,12 +207,24 @@ class IngestPipeline:
             # 构建 LangChain Document 列表
             docs = []
             for chunk in batch_chunks:
+                # 防御性检查：确保 doc_type 存在
+                if not chunk.doc_type:
+                    logger.error(
+                        f"[入库] chunk {chunk.chunk_id} 缺失 doc_type 字段. "
+                        f"file={document.file_name}, doc_id={document.doc_id}"
+                    )
+                    raise ValueError(
+                        f"Chunk {chunk.chunk_id} missing 'doc_type'. "
+                        f"Please ensure splitter sets doc_type correctly."
+                    )
+
                 docs.append(Document(
                     page_content=chunk.text,
                     metadata={
                         "chunk_id": chunk.chunk_id,
                         "doc_id": chunk.doc_id,
-                        **chunk.metadata
+                        "doc_type": chunk.doc_type,  # 显式传递，不依赖 chunk.metadata
+                        **chunk.metadata            # 其他元数据
                     }
                 ))
 

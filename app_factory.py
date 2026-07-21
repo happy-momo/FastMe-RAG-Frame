@@ -115,33 +115,56 @@ class FastMeRAG:
     # =========================================================================
 
     DEFAULT_CONFIG: Dict[str, Any] = {
+        # 向量库配置 / Vector Store Configuration
         "vector_store": {
             "type": "chroma",
-            "config": {}
+            "config": {
+                "persist_directory": "./data/chroma",      # Chroma 持久化目录
+                "collection_name": "fastme_rag",           # Chroma 集合名称
+                # "index_path": "./data/faiss_index",      # FAISS 索引路径 (当 type=faiss 时)
+            }
         },
+        # Embedding 模型配置 / Embedding Model Configuration
         "embedding": {
             "model_name": "BAAI/bge-m3",
             "cache_dir": "./models",
-            "batch_size": 32
+            "batch_size": 32,
+            "device": "cpu",               # 计算设备：cpu 或 cuda
+            "normalize": True,             # 是否归一化 embeddings
         },
+        # LLM 配置 / LLM Configuration
         "llm": {
             "model_name": "qwen-plus",
             "base_url": "http://localhost:8000/v1",
-            "temperature": 0.2
+            "api_key": "",                 # API Key（建议从环境变量读取）
+            "temperature": 0.2,
+            "max_tokens": 2048,
+            "streaming": True,             # 是否启用流式输出
         },
+        # Chunking 配置 / Chunking Configuration
         "chunking": {
-            "default_max_size": 1000
+            "default_max_size": 1000,
+            "by_type": {
+                "log": 600,                # 日志条目通常较短
+                "manual": 1500,            # 章节结构完整，需要保留上下文
+                "business": 1000,          # 业务记录中等长度
+                "sop": 800,                # 操作步骤需要精确
+            }
         },
+        # Pipeline 配置 / Pipeline Configuration
         "ingest_pipeline": {
             "batch_size": 32,
-            "show_progress_bar": False
+            "show_progress_bar": False,
         },
         "chat_pipeline": {
-            "default_top_k": 5
+            "default_top_k": 5,
+            "max_context_length": 4096,
         },
+        # 其他配置 / Other Configuration
         "language": "zh",
         "config_dir": "./config",
         "data_dir": "./data",
+        "log_level": "INFO",
     }
 
     # =========================================================================
@@ -285,13 +308,22 @@ class FastMeRAG:
 
         Returns:
             合并后的配置字典 / Merged configuration dictionary
+
+        Note:
+            配置合并逻辑 / Configuration merge logic:
+            - dict: 与 DEFAULT_CONFIG 深度合并
+            - str/Path (文件): 加载文件后与 DEFAULT_CONFIG 深度合并
+            - None: 返回 DEFAULT_CONFIG 副本
         """
         if config is None:
             return self.DEFAULT_CONFIG.copy()
         elif isinstance(config, dict):
+            logger.debug("[FastMeRAG] 从配置字典加载（与默认配置合并）")
             return ConfigLoader._deep_merge(self.DEFAULT_CONFIG, config)
         elif isinstance(config, (str, Path)):
-            return ConfigLoader.load(config)
+            logger.debug(f"[FastMeRAG] 从配置文件加载：{config}（与默认配置合并）")
+            file_config = ConfigLoader.load(config)
+            return ConfigLoader._deep_merge(self.DEFAULT_CONFIG, file_config)
         raise ValueError(f"Unsupported config type: {type(config)}")
 
     def _load_config_from_env_or_default(self) -> Dict[str, Any]:
@@ -314,10 +346,16 @@ class FastMeRAG:
             logger.info(f"[FastMeRAG] 从配置文件加载: {config_path}")
             return ConfigLoader.load(config_path)
 
-        # 检查是否有必要的环境变量配置
-        # Check if required environment variables are set
-        embedding_model = os.getenv("EMBEDDING_MODEL")
-        llm_model = os.getenv("LLM_MODEL")
+        # 检查是否有必要的环境变量配置（支持 FASTME_ 前缀和无前缀别名）
+        # Check if required environment variables are set (supports FASTME_ prefix and alias)
+        embedding_model = (
+            os.getenv("FASTME_EMBEDDING_MODEL") or
+            os.getenv("EMBEDDING_MODEL")
+        )
+        llm_model = (
+            os.getenv("FASTME_LLM_MODEL") or
+            os.getenv("LLM_MODEL")
+        )
 
         if embedding_model or llm_model:
             # 有环境变量配置，从环境变量构建配置
@@ -337,14 +375,15 @@ class FastMeRAG:
         Build configuration from environment variables
 
         支持的环境变量 / Supported environment variables:
-        - EMBEDDING_MODEL: Embedding 模型名称（支持本地路径）
-        - MODEL_CACHE_DIR: 模型缓存目录
-        - LLM_MODEL: LLM 模型名称
-        - LLM_BASE_URL: LLM API 地址
-        - LLM_API_KEY: LLM API Key
+        - FASTME_EMBEDDING_MODEL / EMBEDDING_MODEL: Embedding 模型名称
+        - FASTME_MODEL_CACHE_DIR / MODEL_CACHE_DIR: 模型缓存目录
+        - FASTME_LLM_MODEL / LLM_MODEL: LLM 模型名称
+        - FASTME_LLM_BASE_URL / LLM_BASE_URL: LLM API 地址
+        - FASTME_LLM_API_KEY / LLM_API_KEY: LLM API Key
         - FASTME_VECTOR_STORE_TYPE: 向量库类型
-        - CHROMA_DIR / CHROMA_PERSIST_DIR: Chroma 持久化目录
-        - CHROMA_COLLECTION: Chroma 集合名称
+        - FASTME_CHROMA_PERSIST_DIR / CHROMA_DIR: Chroma 持久化目录
+        - FASTME_CHROMA_COLLECTION / CHROMA_COLLECTION: Chroma 集合名称
+        - FASTME_FAISS_INDEX_PATH / FAISS_INDEX_PATH: FAISS 索引路径
         - FASTME_LANGUAGE: 语言设置
 
         Returns:
@@ -356,13 +395,13 @@ class FastMeRAG:
                 "config": {}
             },
             "embedding": {
-                "model_name": os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
-                "cache_dir": os.getenv("MODEL_CACHE_DIR", "./models")
+                "model_name": os.getenv("FASTME_EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
+                "cache_dir": os.getenv("FASTME_MODEL_CACHE_DIR") or os.getenv("MODEL_CACHE_DIR", "./models"),
             },
             "llm": {
-                "model_name": os.getenv("LLM_MODEL", "qwen-plus"),
-                "base_url": os.getenv("LLM_BASE_URL", "http://localhost:8000/v1"),
-                "api_key": os.getenv("LLM_API_KEY", "")
+                "model_name": os.getenv("FASTME_LLM_MODEL") or os.getenv("LLM_MODEL", "qwen-plus"),
+                "base_url": os.getenv("FASTME_LLM_BASE_URL") or os.getenv("LLM_BASE_URL", "http://localhost:8000/v1"),
+                "api_key": os.getenv("FASTME_LLM_API_KEY") or os.getenv("LLM_API_KEY", "")
             },
             "language": os.getenv("FASTME_LANGUAGE", "zh")
         }
@@ -370,16 +409,21 @@ class FastMeRAG:
         # 向量库特定配置 / Vector store specific configuration
         vs_type = config["vector_store"]["type"]
         if vs_type == "chroma":
-            # 支持两种环境变量名：CHROMA_DIR（旧）和 CHROMA_PERSIST_DIR（新）
-            # Support both: CHROMA_DIR (old) and CHROMA_PERSIST_DIR (new)
-            persist_dir = os.getenv("CHROMA_PERSIST_DIR") or os.getenv("CHROMA_DIR", "./data/chroma")
+            # 支持两种环境变量名：CHROMA_DIR（旧）和 FASTME_CHROMA_PERSIST_DIR（新）
+            # Support both: CHROMA_DIR (old) and FASTME_CHROMA_PERSIST_DIR (new)
+            persist_dir = (
+                os.getenv("FASTME_CHROMA_PERSIST_DIR") or
+                os.getenv("CHROMA_PERSIST_DIR") or
+                os.getenv("CHROMA_DIR", "./data/chroma")
+            )
             config["vector_store"]["config"]["persist_directory"] = persist_dir
             config["vector_store"]["config"]["collection_name"] = os.getenv(
-                "CHROMA_COLLECTION", "fastme_rag"
+                "FASTME_CHROMA_COLLECTION" or "CHROMA_COLLECTION", "fastme_rag"
             )
         elif vs_type == "faiss":
-            config["vector_store"]["config"]["index_path"] = os.getenv(
-                "FAISS_INDEX_PATH", "./data/faiss_index"
+            config["vector_store"]["config"]["index_path"] = (
+                os.getenv("FASTME_FAISS_INDEX_PATH") or
+                os.getenv("FAISS_INDEX_PATH", "./data/faiss_index")
             )
 
         return config

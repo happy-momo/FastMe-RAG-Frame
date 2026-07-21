@@ -215,23 +215,47 @@ class ConfigLoader:
                vector_store and vector_store.type must exist
             2. vector_store.type 必须是支持的值
                vector_store.type must be a supported value
-            3. embedding 和 embedding.model_name 必须存在
+            3. vector_store.config 必须包含对应类型的必要字段
+               vector_store.config must contain required fields for the type
+            4. embedding 和 embedding.model_name 必须存在
                embedding and embedding.model_name must exist
-            4. llm 和 llm.model_name 必须存在
+            5. llm 和 llm.model_name 必须存在
                llm and llm.model_name must exist
 
         Example:
             >>> ConfigLoader._validate_config({
-            ...     "vector_store": {"type": "chroma"},
+            ...     "vector_store": {"type": "chroma", "config": {"persist_directory": "./data/chroma"}},
             ...     "embedding": {"model_name": "BAAI/bge-m3"},
             ...     "llm": {"model_name": "qwen-plus"}
             ... })  # No exception raised
         """
         # 验证 vector_store / Validate vector_store
-        if 'vector_store' not in config:
+        cls._validate_vector_store_config(config.get("vector_store", {}))
+
+        # 验证 embedding / Validate embedding
+        cls._validate_embedding_config(config.get("embedding", {}))
+
+        # 验证 llm / Validate llm
+        cls._validate_llm_config(config.get("llm", {}))
+
+        # 验证 chunking 配置（可选） / Validate chunking config (optional)
+        cls._validate_chunking_config(config.get("chunking", {}))
+
+    @classmethod
+    def _validate_vector_store_config(cls, vs_config: Dict[str, Any]) -> None:
+        """
+        验证向量库配置
+        Validate vector store configuration
+
+        Args:
+            vs_config: 向量库配置字典 / Vector store configuration dictionary
+
+        Raises:
+            ValueError: 配置无效 / Configuration invalid
+        """
+        if not vs_config:
             raise ValueError("Missing required config: 'vector_store'")
 
-        vs_config = config['vector_store']
         if 'type' not in vs_config:
             raise ValueError("Missing required config: 'vector_store.type'")
 
@@ -242,16 +266,125 @@ class ConfigLoader:
                 f"Valid types: {valid_types}"
             )
 
-        # 验证 embedding / Validate embedding
-        if 'embedding' not in config:
+        # 验证向量库特定配置 / Validate vector store specific config
+        vs_specific_config = vs_config.get("config", {})
+        vs_type = vs_config['type']
+
+        if vs_type == 'chroma':
+            if 'persist_directory' not in vs_specific_config:
+                raise ValueError(
+                    "Chroma vector store requires 'persist_directory' in vector_store.config. "
+                    "Example: {\"persist_directory\": \"./data/chroma\"}"
+                )
+        elif vs_type == 'faiss':
+            if 'index_path' not in vs_specific_config:
+                raise ValueError(
+                    "FAISS vector store requires 'index_path' in vector_store.config. "
+                    "Example: {\"index_path\": \"./data/faiss_index\"}"
+                )
+        # milvus, qdrant, weaviate 未来扩展时添加验证
+        # Add validation for milvus, qdrant, weaviate when extended
+
+    @classmethod
+    def _validate_embedding_config(cls, emb_config: Dict[str, Any]) -> None:
+        """
+        验证 Embedding 配置
+        Validate embedding configuration
+
+        Args:
+            emb_config: Embedding 配置字典 / Embedding configuration dictionary
+
+        Raises:
+            ValueError: 配置无效 / Configuration invalid
+        """
+        if not emb_config:
             raise ValueError("Missing required config: 'embedding'")
 
-        if 'model_name' not in config['embedding']:
-            raise ValueError("Missing required config: 'embedding.model_name'")
+        if 'model_name' not in emb_config:
+            raise ValueError(
+                "Missing required config: 'embedding.model_name'. "
+                "Example: {\"model_name\": \"BAAI/bge-m3\"}"
+            )
 
-        # 验证 llm / Validate llm
-        if 'llm' not in config:
+        # 验证 model_name 不为空
+        if not emb_config['model_name']:
+            raise ValueError("'embedding.model_name' cannot be empty")
+
+    @classmethod
+    def _validate_llm_config(cls, llm_config: Dict[str, Any]) -> None:
+        """
+        验证 LLM 配置
+        Validate LLM configuration
+
+        Args:
+            llm_config: LLM 配置字典 / LLM configuration dictionary
+
+        Raises:
+            ValueError: 配置无效 / Configuration invalid
+        """
+        if not llm_config:
             raise ValueError("Missing required config: 'llm'")
 
-        if 'model_name' not in config['llm']:
-            raise ValueError("Missing required config: 'llm.model_name'")
+        if 'model_name' not in llm_config:
+            raise ValueError(
+                "Missing required config: 'llm.model_name'. "
+                "Example: {\"model_name\": \"qwen-plus\"}"
+            )
+
+        # 验证 model_name 不为空
+        if not llm_config['model_name']:
+            raise ValueError("'llm.model_name' cannot be empty")
+
+        # 验证 base_url 格式（如果存在）
+        base_url = llm_config.get('base_url')
+        if base_url and not base_url.startswith(('http://', 'https://')):
+            raise ValueError(
+                f"Invalid 'llm.base_url' format: {base_url}. "
+                "Must start with http:// or https://"
+            )
+
+        # 验证 temperature 范围（如果存在）
+        temperature = llm_config.get('temperature')
+        if temperature is not None:
+            if not (0 <= temperature <= 2):
+                raise ValueError(
+                    f"Invalid 'llm.temperature': {temperature}. "
+                    "Must be between 0 and 2"
+                )
+
+    @classmethod
+    def _validate_chunking_config(cls, chunking_config: Dict[str, Any]) -> None:
+        """
+        验证 Chunking 配置
+        Validate chunking configuration
+
+        Args:
+            chunking_config: Chunking 配置字典 / Chunking configuration dictionary
+
+        Raises:
+            ValueError: 配置无效 / Configuration invalid
+        """
+        if not chunking_config:
+            return  # chunking 是可选配置 / chunking is optional
+
+        default_max_size = chunking_config.get('default_max_size')
+        if default_max_size is not None:
+            if not isinstance(default_max_size, int) or default_max_size <= 0:
+                raise ValueError(
+                    f"Invalid 'chunking.default_max_size': {default_max_size}. "
+                    "Must be a positive integer"
+                )
+
+        by_type = chunking_config.get('by_type')
+        if by_type is not None:
+            if not isinstance(by_type, dict):
+                raise ValueError(
+                    f"Invalid 'chunking.by_type': {by_type}. "
+                    "Must be a dictionary"
+                )
+            for doc_type, size in by_type.items():
+                if not isinstance(size, int) or size <= 0:
+                    raise ValueError(
+                        f"Invalid chunk size for '{doc_type}': {size}. "
+                        "Must be a positive integer"
+                    )
