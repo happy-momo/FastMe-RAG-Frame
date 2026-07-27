@@ -32,6 +32,7 @@ FastMeRAG is a factory class responsible for:
 """
 
 import os
+import copy
 import logging
 import yaml
 from pathlib import Path
@@ -316,7 +317,7 @@ class FastMeRAG:
             - None: 返回 DEFAULT_CONFIG 副本
         """
         if config is None:
-            return self.DEFAULT_CONFIG.copy()
+            return copy.deepcopy(self.DEFAULT_CONFIG)
         elif isinstance(config, dict):
             logger.debug("[FastMeRAG] 从配置字典加载（与默认配置合并）")
             return ConfigLoader._deep_merge(self.DEFAULT_CONFIG, config)
@@ -346,7 +347,7 @@ class FastMeRAG:
             yaml_config = ConfigLoader.load(config_path)
         else:
             logger.info("[FastMeRAG] 无配置文件，使用默认配置")
-            yaml_config = self.DEFAULT_CONFIG.copy()
+            yaml_config = copy.deepcopy(self.DEFAULT_CONFIG)
 
         # 2. 构建环境变量覆盖配置
         env_override = self._build_env_override_config()
@@ -499,9 +500,13 @@ class FastMeRAG:
                 os.getenv("CHROMA_DIR", "./data/chroma")
             )
             config["vector_store"]["config"]["persist_directory"] = persist_dir
-            config["vector_store"]["config"]["collection_name"] = os.getenv(
-                "FASTME_CHROMA_COLLECTION" or "CHROMA_COLLECTION", "fastme_rag"
+            # 支持 FASTME_CHROMA_COLLECTION（新）与 CHROMA_COLLECTION（旧别名）
+            # Support FASTME_CHROMA_COLLECTION (new) and CHROMA_COLLECTION (legacy alias)
+            collection_name = (
+                os.getenv("FASTME_CHROMA_COLLECTION")
+                or os.getenv("CHROMA_COLLECTION", "fastme_rag")
             )
+            config["vector_store"]["config"]["collection_name"] = collection_name
         elif vs_type == "faiss":
             config["vector_store"]["config"]["index_path"] = (
                 os.getenv("FASTME_FAISS_INDEX_PATH") or
@@ -528,7 +533,10 @@ class FastMeRAG:
         return HuggingFaceEmbeddings(
             model_name=cfg.get("model_name", "BAAI/bge-m3"),
             cache_folder=cfg.get("cache_dir", "./models"),
-            model_kwargs={"device": "cpu", "trust_remote_code": True},
+            model_kwargs={
+                "device": cfg.get("device", "cpu"),
+                "trust_remote_code": True,
+            },
             encode_kwargs={
                 "normalize_embeddings": cfg.get("normalize", True),
                 "batch_size": cfg.get("batch_size", 32)
@@ -561,12 +569,25 @@ class FastMeRAG:
         from langchain_openai import ChatOpenAI
 
         cfg = self.config.get("llm", {})
-        api_key = cfg.get("api_key", os.getenv("LLM_API_KEY", ""))
+        api_key = cfg.get("api_key")
 
-        # 支持 ${VAR} 语法引用环境变量
-        # Support ${VAR} syntax for environment variable reference
+        # 兜底 1：配置未提供 api_key 时，从环境变量读取
+        # 支持规范名 FASTME_LLM_API_KEY 与旧别名 LLM_API_KEY
+        # Fallback 1: read from env when api_key not in config
+        if not api_key:
+            api_key = os.getenv("FASTME_LLM_API_KEY") or os.getenv("LLM_API_KEY", "")
+
+        # 兜底 2：支持 ${VAR} 语法引用环境变量
+        # 当 ConfigLoader._expand_env_vars 未能解析（环境变量当时不存在）时，
+        # 此处再次尝试解析；若 VAR 本身未设置，回退到 FASTME_LLM_API_KEY / LLM_API_KEY
+        # Fallback 2: support ${VAR} syntax for environment variable reference
         if isinstance(api_key, str) and api_key.startswith("${") and api_key.endswith("}"):
-            api_key = os.getenv(api_key[2:-1], "")
+            var_name = api_key[2:-1]
+            api_key = (
+                os.getenv(var_name)
+                or os.getenv("FASTME_LLM_API_KEY")
+                or os.getenv("LLM_API_KEY", "")
+            )
 
         return ChatOpenAI(
             model_name=cfg.get("model_name", "qwen-plus"),
@@ -672,11 +693,15 @@ class FastMeRAG:
             scene_router=self.scene_router,
         )
 
-        # ChatPipeline
+        # ChatPipeline（传入 chat_pipeline 配置：default_top_k / max_context_length）
+        # ChatPipeline (pass chat_pipeline config: default_top_k / max_context_length)
+        chat_cfg = self.config.get("chat_pipeline", {})
         self.chat_pipeline = ChatPipeline(
             scene_aware_retriever=self.scene_aware_retriever,
             prompt_adapter=self.prompt_adapter,
             llm=self.llm,
+            default_top_k=chat_cfg.get("default_top_k", 5),
+            max_context_length=chat_cfg.get("max_context_length"),
         )
 
     def _bind_methods(self):

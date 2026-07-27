@@ -43,7 +43,7 @@
 | 🏷️ **Industrial Metadata Extraction** | Automatic extraction of 16 industrial fields (device ID, line ID, fault code, work order ID, etc.) |
 | 🌐 **Multi-language Support** | Chinese/English interface switching with configurable field labels |
 | 🔌 **Pluggable Architecture** | Based on LangChain, all components (Embedding/Vector Store/LLM) are configurable |
-| 💾 **Multi Vector Store Support** | Support for Chroma (persistent), FAISS (in-memory), and more |
+| 💾 **Multi Vector Store Support** | Support for Chroma (persistent), FAISS (in-memory/persistent), and more |
 | ⚙️ **Configuration-driven** | YAML configuration files for scenarios, prompts, and field labels |
 | 📊 **Streaming Output** | Streaming Q&A for faster first token and better user experience |
 | 🎛️ **Flexible Configuration** | Configurable chunk size, batch size, progress bar, and more |
@@ -58,6 +58,8 @@
 pip install -r requirements.txt
 ```
 
+> **💡 Dependency Note**: `requirements.txt` includes all dependencies needed by the framework, including `python-docx` (for DOCX document parsing, v1.1.0+).
+
 ### 2. Configure Environment Variables
 
 ```bash
@@ -66,7 +68,7 @@ cp .env.example .env
 
 # Edit .env file
 LLM_BASE_URL=http://localhost:8000/v1
-LLM_API_KEY=your-api-key-here
+FASTME_LLM_API_KEY=your-api-key-here
 LLM_MODEL=qwen-plus
 
 # Embedding model configuration (supports local path or HuggingFace model name)
@@ -151,7 +153,7 @@ The `FastMeRAG` framework automatically reads configuration from the `.env` file
 ```bash
 # ===== LLM Configuration =====
 LLM_BASE_URL=http://localhost:8000/v1
-LLM_API_KEY=your-api-key-here
+FASTME_LLM_API_KEY=your-api-key-here
 LLM_MODEL=qwen-plus
 
 # ===== Embedding Model Configuration =====
@@ -184,6 +186,11 @@ rag = FastMeRAG(
     llm_model="qwen-plus"               # Overrides LLM_MODEL in .env
 )
 ```
+
+> **💡 YAML Config Fields Now Effective**:
+> - `embedding.device`: Specifies the Embedding model device (e.g., `cuda` / `cpu`), previously hardcoded to `cpu` and now takes effect
+> - `chat_pipeline.default_top_k`: Default retrieval count for the chat pipeline, overridden by explicit caller parameters and scene config
+> - `chat_pipeline.max_context_length`: Maximum context characters; context is truncated when exceeded (appends `...(context truncated)`), set to `null` for no limit
 
 ### Local Model vs HuggingFace Model
 
@@ -366,6 +373,8 @@ result = rag.ingest(
     ]
 }
 ```
+
+> **💡 FAISS Persistence Note**: `ingest()` automatically calls `persist()` after ingestion to write data to disk, ensuring data survives process exit. Chroma behavior is unchanged (auto-persistent). `batch_ingest()`'s `persist_interval` parameter semantics remain unchanged (memory cleanup interval).
 
 **Examples:**
 
@@ -624,6 +633,8 @@ result = rag.chat_with_memory(
     top_k: int = None                 # Number of results (optional)
 )
 ```
+
+> **💡 Memory Protection**: When the LLM returns an empty answer, the framework returns a fallback text "Sorry, failed to generate a valid answer..." but **does not store it in conversation memory**, preventing contamination of multi-turn context.
 
 #### `get_memory()` - Get Session Memory
 

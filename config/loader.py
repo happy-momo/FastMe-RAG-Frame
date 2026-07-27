@@ -8,6 +8,7 @@ Responsible for loading and validating configuration files.
 
 import os
 import re
+import copy
 import yaml
 import json
 from pathlib import Path
@@ -179,6 +180,9 @@ class ConfigLoader:
         Note:
             嵌套字典会递归合并，其他类型直接覆盖
             Nested dicts are recursively merged, other types are overwritten
+            返回值为完全独立的深拷贝，修改结果不会影响 base / override
+            The returned dict is a fully independent deepcopy; mutating it
+            does not affect base or override
 
         Example:
             >>> base = {"a": 1, "b": {"c": 2}}
@@ -186,15 +190,42 @@ class ConfigLoader:
             >>> ConfigLoader._deep_merge(base, override)
             {'a': 1, 'b': {'c': 2, 'd': 3}}
         """
-        result = base.copy()
+        # 深拷贝 base，确保未覆盖的嵌套字典不与 base 共享引用
+        # Deepcopy base so non-overridden nested dicts are not shared with base
+        result = copy.deepcopy(base)
 
         for key, value in override.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-                result[key] = cls._deep_merge(result[key], value)
+                # result[key] 已是独立拷贝，原地合并 override 即可
+                # result[key] is already an independent copy; merge override in place
+                cls._merge_inplace(result[key], value)
             else:
-                result[key] = value
+                result[key] = copy.deepcopy(value)
 
         return result
+
+    @classmethod
+    def _merge_inplace(
+        cls,
+        target: Dict[str, Any],
+        override: Dict[str, Any],
+    ) -> None:
+        """
+        将 override 原地合并到 target（target 由调用方独占）
+        Merge override into target in place (target is owned by the caller)
+
+        与 _deep_merge 配合使用，避免对已深拷贝的嵌套字典重复深拷贝。
+        Used together with _deep_merge to avoid deepcopying already-copied nested dicts.
+
+        Args:
+            target: 目标字典（会被原地修改）/ Target dict (modified in place)
+            override: 覆盖字典 / Override dict
+        """
+        for key, value in override.items():
+            if key in target and isinstance(target[key], dict) and isinstance(value, dict):
+                cls._merge_inplace(target[key], value)
+            else:
+                target[key] = copy.deepcopy(value)
 
     @classmethod
     def _validate_config(cls, config: Dict[str, Any]) -> None:

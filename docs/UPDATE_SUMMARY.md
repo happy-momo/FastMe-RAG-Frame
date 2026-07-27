@@ -166,6 +166,28 @@ FASTME-RAG/
 
 ---
 
+## 🐛 P0-P1 Bug 修复 (2026-07-27)
+
+### 修复清单
+
+| # | 问题 | 修复 |
+|---|------|------|
+| 1 | `embedding.device` 配置被忽略，始终使用 `cpu` | `app_factory.py` 的 `_create_embeddings` 改为读取 `cfg.get("device", "cpu")`，配置文件中 `embedding.device: cuda` 现在真正生效 |
+| 2 | LLM api_key 环境变量名不一致 | 两个 YAML 中 `api_key: ${LLM_API_KEY}` 改为 `api_key: ${FASTME_LLM_API_KEY}`；`app_factory.py` 支持规范名 `FASTME_LLM_API_KEY` 优先，旧别名 `LLM_API_KEY` 作为回退 |
+| 3 | `CHROMA_COLLECTION` 旧别名因 `os.getenv("A" or "B")` 逻辑错误永远无法读取 | `app_factory.py` 修复为分别检查规范名 `FASTME_CHROMA_COLLECTION` 与旧别名 `CHROMA_COLLECTION` |
+| 4 | 多实例配置互相污染（`DEFAULT_CONFIG` 被修改） | `config/loader.py` 的 `_deep_merge` 返回完全深拷贝；`app_factory.py` 改用 `copy.deepcopy` |
+| 5 | FAISS 单文件 `ingest()` 后数据不落盘，进程退出即丢失 | `core/ingest_pipeline.py` 的 `ingest()` 在分批入库完成后自动调用 `self.vector_store.persist()`（带 try/except，失败仅告警） |
+| 6 | `chat_pipeline.default_top_k` 和 `max_context_length` 已定义但未使用 | `core/chat_pipeline.py` 新增对应参数；`app_factory._init_pipelines` 从配置读取并传入；top_k 优先级：调用方显式 > 场景配置 > `default_top_k` |
+| 7 | `requirements.txt` 缺少 `python-docx`（`adapters/document_loader.py` 依赖） | 新增 `python-docx>=1.1.0` |
+| 8 | LLM 返回空回答时被存入对话记忆，污染多轮上下文 | `core/chat_pipeline.py` 的 `chat_with_memory` 在空回答时返回兜底文本，但不再将其写入记忆 |
+| 9 | `prompt_templates.yaml` default 场景 system prompt 引号未闭合、缺句号 | 补全为 `回答"当前知识库无法得到相关的信息"。` |
+
+---
+
 **完成时间：** 2026-07-17
 
-**文档版本：** v1.0
+---
+
+**P0-P1 修复完成时间：** 2026-07-27
+
+**文档版本：** v1.1

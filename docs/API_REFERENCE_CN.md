@@ -131,6 +131,8 @@ def ingest(
 }
 ```
 
+> **注意**：`ingest()` 在入库完成后会自动调用 `persist()` 将数据写入磁盘（FAISS 后端尤其重要，确保进程退出后数据不丢失）；Chroma 后端行为不变。`batch_ingest()` 的 `persist_interval` 参数含义不变（内存清理间隔）。
+
 **示例**:
 
 ```python
@@ -336,6 +338,8 @@ def chat_with_memory(
 | `scene` | str | `"default"` | 场景名称 |
 | `filters` | dict | `None` | 过滤条件 |
 | `top_k` | int | 场景配置 | 召回数量 |
+
+> **注意**：当 LLM 返回空回答时，框架会返回兜底文本"抱歉，未能生成有效回答…"，但**不会将其存入对话记忆**，避免污染多轮上下文。
 
 **示例**:
 

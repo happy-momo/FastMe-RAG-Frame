@@ -71,6 +71,8 @@ class ChatPipeline:
         scene_aware_retriever: SceneAwareRetriever,
         prompt_adapter,
         llm,
+        default_top_k: int = 5,
+        max_context_length: Optional[int] = None,
     ):
         """
         初始化对话流水线
@@ -80,15 +82,67 @@ class ChatPipeline:
             scene_aware_retriever: SceneAwareRetriever 实例 / SceneAwareRetriever instance
             prompt_adapter: Prompt 适配器，管理 Prompt 模板 / Prompt adapter managing prompt templates
             llm: LLM 实例（ChatOpenAI）/ LLM instance (ChatOpenAI)
+            default_top_k: 默认召回数量，当调用方未指定 top_k 且场景配置也未提供时使用，默认 5
+                           / Default retrieval count, used when caller omits top_k and scene config
+                           has none, default 5
+            max_context_length: 上下文最大字符数，超过则截断以避免超出 LLM token 上限，None 表示不限制
+                                / Max context chars; truncated to avoid exceeding LLM token limit, None=unlimited
         """
         self.scene_aware_retriever = scene_aware_retriever
         self.prompt_adapter = prompt_adapter
         self.llm = llm
+        self.default_top_k = default_top_k
+        self.max_context_length = max_context_length
 
         # 初始化记忆管理
         self.memories: Dict[str, ConversationBufferWindowMemory] = {}
         # 保存每个会话的 max_turns 配置
         self.memory_configs: Dict[str, int] = {}
+
+    def _resolve_top_k(
+        self,
+        top_k: Optional[int],
+        scene: str,
+    ) -> int:
+        """
+        解析最终召回数量
+        Resolve the final retrieval count
+
+        优先级 / Priority:
+        1. 调用方显式传入的 top_k / Explicitly passed top_k
+        2. 场景配置中的 top_k / Scene config top_k
+        3. self.default_top_k / Pipeline default
+
+        Args:
+            top_k: 调用方传入的 top_k（可能为 None）/ Caller-provided top_k (may be None)
+            scene: 场景名称 / Scene name
+
+        Returns:
+            解析后的召回数量 / Resolved retrieval count
+        """
+        if top_k is not None:
+            return top_k
+        scene_config = self.scene_aware_retriever.scene_router.route(scene)
+        return scene_config.get("top_k", self.default_top_k)
+
+    def _truncate_context(self, context_text: str) -> str:
+        """
+        按 max_context_length 截断上下文，避免超出 LLM token 上限
+        Truncate context by max_context_length to avoid exceeding LLM token limit
+
+        Args:
+            context_text: 格式化后的上下文 / Formatted context text
+
+        Returns:
+            可能被截断的上下文 / Possibly truncated context
+        """
+        if self.max_context_length and len(context_text) > self.max_context_length:
+            logger.warning(
+                f"[问答] 上下文长度 {len(context_text)} 超过 max_context_length="
+                f"{self.max_context_length}，已截断"
+            )
+            return context_text[:self.max_context_length] + "\n...(上下文已截断)"
+        return context_text
 
     def chat(
         self,
@@ -127,7 +181,7 @@ class ChatPipeline:
             question=question,
             scene=scene,
             filters=filters,
-            top_k=top_k
+            top_k=self._resolve_top_k(top_k, scene)
         )
 
         # [调试] 上下文检索结果摘要
@@ -137,8 +191,9 @@ class ChatPipeline:
                          f"chunk_id={ctx.chunk_id}, doc_type={ctx.doc_type}")
             logger.debug(f"[调试 - 上下文]   上下文 [{i}] 文本预览：{ctx.text[:150].replace(chr(10), chr(92)+'n')}...")
 
-        # 2. 格式化上下文
+        # 2. 格式化上下文并按 max_context_length 截断
         context_text = self.prompt_adapter._format_context(contexts, source_fields)
+        context_text = self._truncate_context(context_text)
 
         # [调试] 格式化后的上下文全文
         logger.debug(f"[调试 - 上下文] 格式化后上下文:\n{context_text}")
@@ -208,14 +263,15 @@ class ChatPipeline:
             question=question,
             scene=scene,
             filters=filters,
-            top_k=top_k
+            top_k=self._resolve_top_k(top_k, scene)
         )
 
         # [调试] 流式问答上下文
         logger.debug(f"[调试 - 流式上下文] 检索到 {len(contexts)} 条上下文")
 
-        # 2. 格式化上下文
+        # 2. 格式化上下文并按 max_context_length 截断
         context_text = self.prompt_adapter._format_context(contexts, source_fields)
+        context_text = self._truncate_context(context_text)
 
         # 3. 获取场景配置和系统 Prompt
         scene_config = self.scene_aware_retriever.scene_router.route(scene)
@@ -342,11 +398,12 @@ class ChatPipeline:
             question=question,
             scene=scene,
             filters=filters,
-            top_k=top_k
+            top_k=self._resolve_top_k(top_k, scene)
         )
 
-        # 2. 格式化上下文
+        # 2. 格式化上下文并按 max_context_length 截断
         context_text = self.prompt_adapter._format_context(contexts, source_fields)
+        context_text = self._truncate_context(context_text)
 
         # 3. 获取场景配置和系统 Prompt
         scene_config = self.scene_aware_retriever.scene_router.route(scene)
@@ -372,8 +429,10 @@ class ChatPipeline:
         answer = self.llm.invoke(messages).content
 
         # 处理空回答
+        fallback_used = False
         if not answer or not answer.strip():
             answer = "抱歉，未能生成有效回答，请尝试换一种方式提问。"
+            fallback_used = True
             logger.warning(f"[问答] LLM 返回空回答，question='{question}'")
 
         # [必须] 问答完成信息
@@ -384,10 +443,14 @@ class ChatPipeline:
         sources = self._build_sources(contexts, source_fields)
 
         # 7. 保存记忆
-        memory.save_context(
-            {"input": question},
-            {"output": answer}
-        )
+        #    仅当 LLM 正常返回时保存；空回答的兜底文本不入记忆，避免污染后续多轮上下文
+        #    Save only when the LLM returned a valid answer; the fallback text for empty
+        #    answers is not saved to avoid polluting subsequent multi-turn context
+        if not fallback_used:
+            memory.save_context(
+                {"input": question},
+                {"output": answer}
+            )
 
         return {
             "question": question,

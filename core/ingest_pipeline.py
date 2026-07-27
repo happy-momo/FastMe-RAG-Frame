@@ -235,6 +235,19 @@ class IngestPipeline:
             # 批次完成日志
             logger.debug(f"[入库] 批次 {batch_idx + 1}/{num_batches} 完成：入库 {len(batch_chunks)} 个 chunk")
 
+        # 6. 持久化到磁盘
+        #    FAISS 为纯内存索引，必须显式 save_local 才能落盘（否则进程退出数据丢失）
+        #    Chroma 由 PersistentClient 自动持久化，此调用幂等无害
+        #    Persist to disk:
+        #    - FAISS is in-memory and requires explicit save_local (otherwise data is lost on exit)
+        #    - Chroma auto-persists via PersistentClient; this call is idempotent
+        try:
+            self.vector_store.persist()
+        except Exception as e:
+            logger.warning(
+                f"[入库] 持久化失败：{e}（数据已写入内存索引，但进程退出后可能丢失）"
+            )
+
         # [必须] 入库完成信息
         vector_count = self.vector_store.get_count()
         logger.info(f"[入库] 入库完成：doc_id={document.doc_id}, "

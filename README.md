@@ -43,7 +43,7 @@
 | 🏷️ **工业元数据抽取** | 自动提取设备 ID、产线号、故障码、工单号等 16 个工业字段 |
 | 🌐 **多语言支持** | 中英文界面切换，字段标签可配置 |
 | 🔌 **可插拔架构** | 基于 LangChain，Embedding/向量库/LLM 全部可配置替换 |
-| 💾 **多向量库支持** | 支持 Chroma（持久化）、FAISS（内存）等向量数据库 |
+| 💾 **多向量库支持** | 支持 Chroma（持久化）、FAISS（内存/持久化）等向量数据库 |
 | ⚙️ **配置化驱动** | YAML 配置文件定义场景、Prompt、字段标签，无需改代码 |
 | 📊 **流式输出** | 支持流式问答，首字更快，体验更佳 |
 | 🎛️ **灵活配置** | chunk 尺寸、批次大小、进度条等参数可自由调整 |
@@ -58,6 +58,8 @@
 pip install -r requirements.txt
 ```
 
+> **💡 依赖说明**：`requirements.txt` 包含框架所需的所有依赖，包括 `python-docx`（用于 DOCX 文档解析，v1.1.0+）。
+
 ### 2. 配置环境变量
 
 ```bash
@@ -69,7 +71,7 @@ cp .env.example .env
 
 # LLM 配置 / LLM Configuration
 LLM_BASE_URL=http://localhost:8000/v1
-LLM_API_KEY=your-api-key-here
+FASTME_LLM_API_KEY=your-api-key-here
 LLM_MODEL=qwen-plus
 
 # Embedding 模型配置（支持本地路径或 HuggingFace 模型名）
@@ -189,7 +191,7 @@ rag = FastMeRAG.from_config(
 ```bash
 # ===== LLM 配置 / LLM Configuration =====
 LLM_BASE_URL=http://localhost:8000/v1
-LLM_API_KEY=your-api-key-here
+FASTME_LLM_API_KEY=your-api-key-here
 LLM_MODEL=qwen-plus
 
 # ===== Embedding 模型配置 / Embedding Model Configuration =====
@@ -239,7 +241,7 @@ FASTME_VECTOR_STORE_TYPE=faiss
 | 向量库 | 特点 | 适用场景 |
 |--------|------|----------|
 | **Chroma** | 持久化存储，支持元数据过滤 | 生产环境，需要数据持久化 |
-| **FAISS** | 内存索引，速度极快 | 开发测试，对性能要求高的场景 |
+| **FAISS** | 内存索引，支持自动持久化，速度极快 | 开发测试，对性能要求高的场景 |
 
 ### 环境变量优先级
 
@@ -360,6 +362,11 @@ rag = FastMeRAG(
 > - 如果传入了参数（如 `embedding_model="./models/bge-m3"`），使用参数值
 > - 如果没有传入参数，从 `.env` 文件读取
 > - 如果 `.env` 中也没有配置，使用代码中的默认值
+>
+> **YAML 配置新增生效字段**：
+> - `embedding.device`：指定 Embedding 模型运行设备（如 `cuda` / `cpu`），之前被硬编码忽略，现已生效
+> - `chat_pipeline.default_top_k`：对话管道的默认召回数量，优先级低于调用方显式传入和场景配置
+> - `chat_pipeline.max_context_length`：上下文最大字符数，超过则截断（追加 `...(上下文已截断)`），设为 `null` 不限制
 
 #### 配置示例
 
@@ -467,6 +474,8 @@ result = rag.ingest(
     ]
 }
 ```
+
+> **💡 FAISS 持久化说明**：`ingest()` 在入库完成后会自动调用 `persist()` 将数据写入磁盘，确保进程退出后数据不丢失。Chroma 后端行为不变（自动持久化）。`batch_ingest()` 的 `persist_interval` 参数含义不变（内存清理间隔）。
 
 **示例：**
 
@@ -725,6 +734,8 @@ result = rag.chat_with_memory(
     top_k: int = None                 # 召回数量（可选）
 )
 ```
+
+> **💡 记忆保护**：当 LLM 返回空回答时，框架会返回兜底文本"抱歉，未能生成有效回答…"，但**不会将其存入对话记忆**，避免污染多轮上下文。
 
 #### `get_memory()` - 获取会话记忆
 

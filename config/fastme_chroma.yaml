@@ -35,8 +35,9 @@ embedding:
 llm:
   model_name: qwen-plus           # LLM 模型名称 / Model name
   base_url: http://localhost:8000/v1  # LLM API 地址 / API base URL
-  api_key: ${LLM_API_KEY}         # API Key（从环境变量读取）
-                                  # / API Key (read from environment variable)
+  api_key: ${FASTME_LLM_API_KEY}    # API Key（从环境变量读取，规范名）
+                                  # 旧别名 ${LLM_API_KEY} 仍受支持
+                                  # / API Key (read from env var)
   temperature: 0.2                # 温度参数 / Temperature parameter
   max_tokens: 2048                # 最大生成长度 / Max generation length
 
