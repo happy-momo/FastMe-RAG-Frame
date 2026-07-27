@@ -111,6 +111,10 @@ class FAISSAdapter(VectorStoreAdapter):
         self._embedding_function = embedding_function
         self._index_path = index_path
 
+        # chunk_id -> FAISS docstore_id 映射，用于去重
+        # chunk_id -> FAISS docstore_id mapping, used for deduplication
+        self._chunk_id_to_docstore_id: Dict[str, str] = {}
+
         # 尝试加载现有索引，否则创建空索引
         if load_existing and index_path and Path(index_path).exists():
             try:
@@ -119,7 +123,9 @@ class FAISSAdapter(VectorStoreAdapter):
                     embeddings=embedding_function,
                     allow_dangerous_deserialization=True
                 )
-                logger.info(f"[FAISSAdapter] 加载现有索引：{index_path}")
+                # 重建 chunk_id 映射（从已有文档的 metadata 中提取）
+                self._rebuild_chunk_id_mapping()
+                logger.info(f"[FAISSAdapter] 加载现有索引：{index_path}，已有 {self.get_count()} 个向量")
             except Exception as e:
                 logger.warning(f"[FAISSAdapter] 加载索引失败，创建新索引：{e}")
                 self._faiss = self._create_empty_index(embedding_function)
@@ -134,16 +140,16 @@ class FAISSAdapter(VectorStoreAdapter):
         ids: Optional[List[str]] = None
     ) -> None:
         """
-        添加文档到 FAISS
-        Add documents to FAISS
+        添加文档到 FAISS（支持基于 chunk_id 的去重）
+        Add documents to FAISS (supports chunk_id-based deduplication)
 
         Args:
             documents: 文档列表 / Document list
-            ids: 可选的文档 ID 列表（FAISS 会自动生成 ID） / Optional document ID list (FAISS auto-generates IDs)
+            ids: 文档 ID 列表（chunk_id），用于去重 / Document ID list (chunk_id), used for deduplication
 
         Note:
-            FAISS 不支持自定义 ID，ids 参数会被忽略
-            FAISS does not support custom IDs, the ids parameter is ignored
+            当提供 ids 时，会先删除相同 chunk_id 的已有文档，再添加新文档（upsert 语义）
+            When ids are provided, existing documents with the same chunk_id are deleted first (upsert semantics)
             元数据会自动清洗（只保留 str/int/float/bool，None 被丢弃，其他类型转为 str）
             Metadata is auto-sanitized (keeps only str/int/float/bool, None dropped, other types converted to str)
         """
@@ -156,8 +162,28 @@ class FAISSAdapter(VectorStoreAdapter):
                 metadata=clean_metadata
             ))
 
+        # 如果提供了 ids，执行去重（upsert 语义）
+        if ids:
+            duplicate_count = 0
+            for chunk_id in ids:
+                if chunk_id in self._chunk_id_to_docstore_id:
+                    docstore_id = self._chunk_id_to_docstore_id[chunk_id]
+                    try:
+                        self._faiss.delete([docstore_id])
+                        del self._chunk_id_to_docstore_id[chunk_id]
+                        duplicate_count += 1
+                    except Exception as e:
+                        logger.debug(f"[FAISSAdapter] 删除旧文档失败: {e}")
+            if duplicate_count > 0:
+                logger.debug(f"[FAISSAdapter] 去重：删除 {duplicate_count} 个已有文档")
+
         # 添加到 FAISS
-        self._faiss.add_documents(clean_docs)
+        result_ids = self._faiss.add_documents(clean_docs)
+
+        # 建立 chunk_id -> docstore_id 映射
+        if ids and result_ids:
+            for chunk_id, docstore_id in zip(ids, result_ids):
+                self._chunk_id_to_docstore_id[chunk_id] = docstore_id
 
         logger.debug(f"[FAISSAdapter] 添加 {len(clean_docs)} 个文档")
 
@@ -217,6 +243,7 @@ class FAISSAdapter(VectorStoreAdapter):
             FAISS is an in-memory index; resetting deletes all data
         """
         self._faiss = self._create_empty_index(self._embedding_function)
+        self._chunk_id_to_docstore_id.clear()
         logger.info("[FAISSAdapter] 索引已重置")
 
     def get_config(self) -> Dict[str, Any]:
@@ -283,6 +310,9 @@ class FAISSAdapter(VectorStoreAdapter):
                 allow_dangerous_deserialization=True
             )
 
+            # 重建 chunk_id 映射
+            self._rebuild_chunk_id_mapping()
+
             # 清理垃圾
             gc.collect()
 
@@ -301,6 +331,28 @@ class FAISSAdapter(VectorStoreAdapter):
             始终返回 False / Always returns False
         """
         return False
+
+    def _rebuild_chunk_id_mapping(self):
+        """
+        从现有文档的 metadata 中重建 chunk_id -> docstore_id 映射
+        Rebuild chunk_id -> docstore_id mapping from existing document metadata
+
+        当加载已有索引或重新加载索引后调用，确保去重映射与实际数据一致。
+        Called after loading or reloading an existing index to ensure the dedup mapping is consistent.
+        """
+        self._chunk_id_to_docstore_id.clear()
+        if hasattr(self._faiss, 'docstore') and hasattr(self._faiss, 'index_to_docstore_id'):
+            for faiss_idx, docstore_id in self._faiss.index_to_docstore_id.items():
+                try:
+                    doc = self._faiss.docstore.search(docstore_id)
+                    if doc and hasattr(doc, 'metadata'):
+                        chunk_id = doc.metadata.get("chunk_id")
+                        if chunk_id:
+                            self._chunk_id_to_docstore_id[chunk_id] = docstore_id
+                except Exception:
+                    pass
+        if self._chunk_id_to_docstore_id:
+            logger.debug(f"[FAISSAdapter] 重建 chunk_id 映射：{len(self._chunk_id_to_docstore_id)} 条记录")
 
     def _create_empty_index(self, embedding_function: Embeddings) -> FAISS:
         """

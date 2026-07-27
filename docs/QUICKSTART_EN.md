@@ -25,7 +25,7 @@ cp .env.example .env
 ```bash
 # LLM Configuration
 LLM_BASE_URL=http://localhost:8000/v1/chat/completions
-LLM_API_KEY=your-api-key
+FASTME_LLM_API_KEY=your-api-key
 LLM_MODEL=qwen-plus
 
 # Embedding Model

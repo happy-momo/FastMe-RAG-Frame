@@ -101,6 +101,7 @@ File -> Load -> Split -> Metadata Extraction -> Batch Vectorization -> Store
 - Batch processing to avoid memory peaks
 - Support review mode for chunk preview
 - Periodic memory cleanup optimization
+- Auto-persist after ingestion (FAISS data is written to disk; failure only logs a warning without interrupting; Chroma keeps auto-persistent behavior unchanged)
 
 ### 3. Conversation Pipeline (core/chat_pipeline.py)
 
@@ -330,6 +331,8 @@ yaml.safe_load() -> scene_config (dict)
     v
 Store to instance attribute for subsequent routing use
 ```
+
+**Configuration Isolation**: Config merging uses deep copy strategy, ensuring multiple `FastMeRAG` instances do not affect each other's configuration, preventing `DEFAULT_CONFIG` from being polluted.
 
 ---
 

@@ -1,68 +1,66 @@
 """
-FastMe RAG - 制造业专属 RAG 框架
+FastMe RAG - 制造业专属 RAG 框架（工厂类）
+FastMe RAG - Manufacturing-Specific RAG Framework (Factory Class)
 
-基于 LangChain 构建，提供制造业场景化能力：
-- 4 种制造业专属文档拆解器（日志/手册/工单/SOP）
-- 场景化问答路由
-- 工业元数据自动抽取
-- 配置化驱动
-- 支持多种向量库（Chroma、FAISS 等）
+FastMeRAG 是一个工厂类，负责：
+FastMeRAG is a factory class responsible for:
+1. 加载配置 / Loading configuration
+2. 创建和组装组件 / Creating and assembling components
+3. 委托 Pipeline 提供业务方法 / Delegating to pipelines for business methods
 
-快速开始:
+快速开始 / Quick Start:
+    # 方式 1: 从配置文件加载（推荐）
+    # Method 1: Load from config file (recommended)
     from app_factory import FastMeRAG
+    rag = FastMeRAG.from_config("./config/fastme_chroma.yaml")
 
-    # 使用默认配置（Chroma 向量库）
+    # 方式 2: 从配置字典加载
+    # Method 2: Load from config dictionary
+    rag = FastMeRAG(config={
+        "vector_store": {"type": "faiss", "config": {"index_path": "./data/faiss"}},
+        "embedding": {"model_name": "BAAI/bge-m3"},
+        "llm": {"model_name": "qwen-plus"},
+    })
+
+    # 方式 3: 使用默认配置
+    # Method 3: Use default configuration
     rag = FastMeRAG()
-    rag.ingest("设备手册.pdf", doc_type="manual")
-    result = rag.chat("设备报警怎么处理？", scene="fault_diagnosis")
-    print(result["answer"])
 
-    # 使用 FAISS 向量库
-    rag = FastMeRAG(
-        vector_store_type="faiss",
-        vector_store_config={"index_path": "./data/faiss_index"}
-    )
+    # 使用业务方法 / Use business methods
+    rag.ingest("manual.pdf", doc_type="manual")
+    result = rag.chat("设备报警怎么处理？", scene="fault_diagnosis")
 """
 
 import os
+import copy
 import logging
 import yaml
 from pathlib import Path
-from typing import Optional, List, Dict, Generator, Any
+from typing import Optional, Dict, Any, Union
 
 from dotenv import load_dotenv
 
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_openai import ChatOpenAI
+# 配置加载器 / Configuration loader
+from config.loader import ConfigLoader
 
-# 制造业专属组件
+# 工厂模块 / Factory modules
+from vector_stores.factory import VectorStoreFactory
+from retrievers import RetrieverFactory
+from core.ingest_pipeline import IngestPipeline
+from core.chat_pipeline import ChatPipeline
+
+# 组件 / Components
+from adapters import SimpleDocumentLoader, PromptAdapter
 from splitters.base import SplitterRegistry
-from splitters.log_splitter import LogSplitter
-from splitters.manual_splitter import ManualSplitter
-from splitters.business_splitter import BusinessSplitter
-from splitters.sop_splitter import SopSplitter
-
 from manufacturing.metadata_extractor import IndustrialMetadataExtractor
 from routers.scene_router import SceneRouter
 
-# Pipeline 组件
-from core.ingest_pipeline import IngestPipeline
-from core.chat_pipeline import ChatPipeline
-from adapters import SimpleDocumentLoader, PromptAdapter
-from core.models import FastMeSearchResult
-
-# 检索器和向量库
-from retrievers import RetrieverFactory
-from vector_stores import ChromaAdapter, FAISSAdapter, VectorStoreAdapter
-from vector_stores.factory import VectorStoreFactory
-
-# 加载 .env 环境变量（使用绝对路径，确保在任意工作目录下都能正确加载）
+# 加载 .env 环境变量 / Load .env environment variables
 load_dotenv(Path(__file__).parent / ".env")
 
-# [必须] 框架日志配置
+# 日志配置 / Logging configuration
 logger = logging.getLogger("fastme_rag")
 
-# [必须] 初始化日志系统：默认 INFO 级别，用户可在 app.py 中通过 logging.basicConfig 覆盖
 if not logging.getLogger().handlers:
     logging.basicConfig(
         level=logging.INFO,
@@ -70,7 +68,7 @@ if not logging.getLogger().handlers:
         datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-# [必须] 抑制第三方库日志噪音
+# 抑制第三方库日志噪音 / Suppress third-party library log noise
 for _lib in ["sentence_transformers", "urllib3", "chromadb",
              "httpx", "httpcore", "huggingface_hub", "openai"]:
     logging.getLogger(_lib).setLevel(logging.WARNING)
@@ -78,213 +76,671 @@ for _lib in ["sentence_transformers", "urllib3", "chromadb",
 
 class FastMeRAG:
     """
-    FastMe RAG - 制造业专属 RAG 框架
+    FastMe RAG 工厂类
+    FastMe RAG Factory Class
 
-    支持场景:
+    负责创建和组装 RAG 系统的所有组件，并提供统一的业务接口。
+    Responsible for creating and assembling all components of the RAG system
+    and providing a unified business interface.
+
+    支持场景 / Supported Scenes:
         - fault_diagnosis: 故障诊断（基于运维日志、故障记录）
+          Fault diagnosis (based on operation logs and fault records)
         - manual_query: 设备手册查询
+          Equipment manual query
         - work_order_trace: 工单追溯
+          Work order tracing
         - default: 默认问答
+          Default Q&A
 
-    支持文档类型:
-        - log: 运维日志
-        - manual: 设备手册
-        - business: 工单/业务文档
-        - sop: 工艺 SOP
+    支持文档类型 / Supported Document Types:
+        - log: 运维日志 / Operation logs
+        - manual: 设备手册 / Equipment manuals
+        - business: 工单/业务文档 / Work orders/business documents
+        - sop: 工艺 SOP / Process SOPs
+
+    Example:
+        >>> # 从配置文件加载 / Load from config file
+        >>> rag = FastMeRAG.from_config("./config/fastme_chroma.yaml")
+        >>>
+        >>> # 文档入库 / Document ingestion
+        >>> rag.ingest("manual.pdf", doc_type="manual")
+        >>>
+        >>> # 场景化问答 / Scene-aware Q&A
+        >>> result = rag.chat("设备报警怎么处理？", scene="fault_diagnosis")
+        >>> print(result["answer"])
     """
 
-    def __init__(
-        self,
-        embedding_model: str = None,
-        model_cache_dir: str = None,
-        chroma_dir: str = None,  # 向后兼容，用于 Chroma
-        chroma_collection: str = None,  # 向后兼容，用于 Chroma
-        llm_base_url: str = None,
-        llm_api_key: str = None,
-        llm_model: str = None,
-        config_dir: str = None,
-        temperature: float = 0.2,
-        language: str = None,
+    # =========================================================================
+    # 默认配置 / Default Configuration
+    # =========================================================================
 
-        # ===== Chunk 与批量处理配置 =====
-        chunk_max_size: int = 1000,       # splitter 的 chunk 最大字符数（用于初始化所有 splitter）
-        ingest_batch_size: int = 32,      # 入库分批大小
-        embedding_batch_size: int = 32,   # Embedding 批量大小
-        show_progress_bar: bool = False,  # 显示进度条（ingest 时建议开启，chat 时建议关闭）
+    DEFAULT_CONFIG: Dict[str, Any] = {
+        # 向量库配置 / Vector Store Configuration
+        "vector_store": {
+            "type": "chroma",
+            "config": {
+                "persist_directory": "./data/chroma",      # Chroma 持久化目录
+                "collection_name": "fastme_rag",           # Chroma 集合名称
+                # "index_path": "./data/faiss_index",      # FAISS 索引路径 (当 type=faiss 时)
+            }
+        },
+        # Embedding 模型配置 / Embedding Model Configuration
+        "embedding": {
+            "model_name": "BAAI/bge-m3",
+            "cache_dir": "./models",
+            "batch_size": 32,
+            "device": "cpu",               # 计算设备：cpu 或 cuda
+            "normalize": True,             # 是否归一化 embeddings
+        },
+        # LLM 配置 / LLM Configuration
+        "llm": {
+            "model_name": "qwen-plus",
+            "base_url": "http://localhost:8000/v1",
+            "api_key": "",                 # API Key（建议从环境变量读取）
+            "temperature": 0.2,
+            "max_tokens": 2048,
+            "streaming": True,             # 是否启用流式输出
+        },
+        # Chunking 配置 / Chunking Configuration
+        "chunking": {
+            "default_max_size": 1000,
+            "by_type": {
+                "log": 600,                # 日志条目通常较短
+                "manual": 1500,            # 章节结构完整，需要保留上下文
+                "business": 1000,          # 业务记录中等长度
+                "sop": 800,                # 操作步骤需要精确
+            }
+        },
+        # Pipeline 配置 / Pipeline Configuration
+        "ingest_pipeline": {
+            "batch_size": 32,
+            "show_progress_bar": False,
+        },
+        "chat_pipeline": {
+            "default_top_k": 5,
+            "max_context_length": 4096,
+        },
+        # 其他配置 / Other Configuration
+        "language": "zh",
+        "config_dir": "./config",
+        "data_dir": "./data",
+        "log_level": "INFO",
+    }
 
-        # ===== 向量库配置 =====
-        vector_store_type: str = "chroma",  # 向量库类型：chroma, faiss
-        vector_store_config: dict = None,    # 向量库特定配置
-    ):
+    # =========================================================================
+    # 初始化方法 / Initialization Methods
+    # =========================================================================
+
+    def __init__(self, config: Optional[Union[Dict[str, Any], str, Path]] = None):
         """
-        初始化 FastMe RAG
+        初始化 FastMeRAG
+        Initialize FastMeRAG
 
         Args:
-            embedding_model: Embedding 模型名称，默认 "BAAI/bge-m3"
-            model_cache_dir: 模型缓存目录，默认 "./models"
-            chroma_dir: Chroma 数据目录，默认 "./data/chroma"
-            chroma_collection: Chroma 集合名称，默认 "fastme_rag"
-            llm_base_url: LLM API 地址，默认 "http://localhost:8000/v1/chat/completions"
-            llm_api_key: LLM API Key
-            llm_model: LLM 模型名称，默认 "qwen-plus"
-            config_dir: 配置文件目录，默认 "./config"
-            temperature: LLM 温度，默认 0.2
-            language: 语言，默认 "zh"（中文），可选 "en"（英文）
+            config: 配置字典、YAML 文件路径、或 JSON 文件路径
+                - dict: 直接使用配置字典
+                - str/Path 且以 .yaml/.yml/.json 结尾：加载配置文件
+                - None: 优先使用 .env 环境变量配置，否则使用默认配置
 
-            # ===== Chunk 与批量处理配置 =====
-            chunk_max_size: 单个 chunk 最大字符数，默认 1000。
-                建议值：日志 500-800，手册 1000-1500，工单 800-1200
-            ingest_batch_size: 入库分批大小，默认 32。
-                内存受限时减小 (16-24)，高性能环境可增大 (64-128)
-            embedding_batch_size: Embedding 批量大小，默认 32。
-                GPU 用户可增大到 64-128，内存受限用户减小到 8-16
-            show_progress_bar: 是否显示进度条，默认 False。
-                ingest 大文件时可设置为 True 查看进度，chat 时建议关闭
-                API 服务可设置为 False 关闭进度显示
+        Example:
+            >>> # 使用 .env 配置（推荐）/ Use .env config (recommended)
+            >>> rag = FastMeRAG()
+            >>>
+            >>> # 使用配置文件 / Use config file
+            >>> rag = FastMeRAG("./config/fastme_chroma.yaml")
+            >>>
+            >>> # 使用配置字典 / Use config dictionary
+            >>> rag = FastMeRAG(config={
+            ...     "vector_store": {"type": "faiss"},
+            ...     "embedding": {"model_name": "BAAI/bge-m3"},
+            ...     "llm": {"model_name": "qwen-plus"}
+            ... })
         """
-        # 配置目录
-        self.config_dir = Path(config_dir) if config_dir else Path(__file__).parent / "config"
+        # 1. 加载配置 / Load configuration
+        # 如果 config 为 None，优先尝试从环境变量加载
+        # If config is None, try loading from environment variables first
+        if config is None:
+            self.config = self._load_config_from_env_or_default()
+        else:
+            self.config = self._load_config(config)
 
-        # 初始化配置（从环境变量或参数）
-        self.embedding_model = embedding_model or os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
-        self.model_cache_dir = model_cache_dir or os.getenv("MODEL_CACHE_DIR", "./models")
-        self.llm_base_url = llm_base_url or os.getenv("LLM_BASE_URL", "http://localhost:8000/v1")
-        self.llm_api_key = llm_api_key or os.getenv("LLM_API_KEY", "sk-1234567890abcdef1234567890abcdef")
-        self.llm_model = llm_model or os.getenv("LLM_MODEL", "qwen-plus")
-        self.temperature = temperature
-        self.language = language or os.getenv("FASTME_LANGUAGE", "zh")
+        # 2. 创建核心组件 / Create core components
+        self.embeddings = self._create_embeddings()
+        self.vectorstore = self._create_vectorstore()
+        self.llm = self._create_llm()
 
-        # Chunk 与批量处理配置
-        self.chunk_max_size = chunk_max_size
-        self.ingest_batch_size = ingest_batch_size
-        self.embedding_batch_size = embedding_batch_size
-        self.show_progress_bar = show_progress_bar
+        # 3. 创建制造业组件 / Create manufacturing components
+        self._init_manufacturing_components()
 
-        # 向量库配置
-        self.vector_store_type = vector_store_type
-        self.vector_store_config = vector_store_config or {}
+        # 4. 创建 Pipeline / Create pipelines
+        self._init_pipelines()
 
-        # 向后兼容：如果提供了 chroma_dir/chroma_collection，自动填充到 config
-        if chroma_dir:
-            self.vector_store_config["persist_directory"] = chroma_dir
+        # 5. 绑定业务方法（委托给 Pipeline）/ Bind business methods (delegate to pipelines)
+        self._bind_methods()
+
+        # 6. 日志记录 / Logging
+        self._log_initialization()
+
+    @classmethod
+    def from_config(
+        cls,
+        config: Union[Dict[str, Any], str, Path],
+        overrides: Optional[Dict[str, Any]] = None
+    ) -> "FastMeRAG":
+        """
+        从配置文件或字典创建 FastMeRAG 实例
+        Create FastMeRAG instance from config file or dictionary
+
+        Args:
+            config: 配置文件路径或配置字典
+                    / Config file path or configuration dictionary
+            overrides: 覆盖配置（会合并到原配置）
+                      / Override configuration (merged into original)
+
+        Returns:
+            FastMeRAG 实例 / FastMeRAG instance
+
+        Example:
+            >>> # 从 YAML 文件加载 / Load from YAML file
+            >>> rag = FastMeRAG.from_config("./config/fastme_chroma.yaml")
+            >>>
+            >>> # 从配置字典加载 / Load from config dictionary
+            >>> rag = FastMeRAG.from_config({
+            ...     "vector_store": {"type": "faiss"},
+            ...     "embedding": {"model_name": "BAAI/bge-m3"},
+            ...     "llm": {"model_name": "qwen-plus"}
+            ... })
+            >>>
+            >>> # 加载并覆盖部分配置 / Load and override partial config
+            >>> rag = FastMeRAG.from_config(
+            ...     "./config/fastme_chroma.yaml",
+            ...     overrides={"vector_store": {"config": {"collection_name": "new_coll"}}}
+            ... )
+        """
+        if isinstance(config, dict):
+            if overrides:
+                config = ConfigLoader._deep_merge(config, overrides)
+            return cls(config=config)
+        loaded = ConfigLoader.load(config, overrides)
+        return cls(config=loaded)
+
+    @classmethod
+    def from_env(cls) -> "FastMeRAG":
+        """
+        从环境变量创建 FastMeRAG 实例
+        Create FastMeRAG instance from environment variables
+
+        读取的环境变量 / Environment variables read:
+        - FASTME_CONFIG: 配置文件路径 / Config file path
+        - FASTME_VECTOR_STORE_TYPE: 向量库类型 / Vector store type
+        - EMBEDDING_MODEL: Embedding 模型名称 / Embedding model name
+        - LLM_MODEL: LLM 模型名称 / LLM model name
+        - LLM_BASE_URL: LLM API 地址 / LLM API base URL
+        - LLM_API_KEY: LLM API Key
+
+        Returns:
+            FastMeRAG 实例 / FastMeRAG instance
+
+        Example:
+            >>> # .env 文件 / .env file
+            >>> # FASTME_CONFIG=./config/fastme_faiss.yaml
+            >>> # FASTME_VECTOR_STORE_TYPE=faiss
+            >>> # EMBEDDING_MODEL=BAAI/bge-m3
+            >>> rag = FastMeRAG.from_env()
+        """
+        config_path = os.getenv("FASTME_CONFIG")
+        if config_path:
+            return cls.from_config(config_path)
+        config = cls._build_config_from_env()
+        return cls(config=config)
+
+    # =========================================================================
+    # 内部方法 - 配置加载 / Internal Methods - Configuration Loading
+    # =========================================================================
+
+    def _load_config(self, config: Optional[Union[Dict, str, Path]]) -> Dict[str, Any]:
+        """
+        加载并合并配置
+        Load and merge configuration
+
+        Args:
+            config: 配置字典或文件路径 / Config dictionary or file path
+
+        Returns:
+            合并后的配置字典 / Merged configuration dictionary
+
+        Note:
+            配置合并逻辑 / Configuration merge logic:
+            - dict: 与 DEFAULT_CONFIG 深度合并
+            - str/Path (文件): 加载文件后与 DEFAULT_CONFIG 深度合并
+            - None: 返回 DEFAULT_CONFIG 副本
+        """
+        if config is None:
+            return copy.deepcopy(self.DEFAULT_CONFIG)
+        elif isinstance(config, dict):
+            logger.debug("[FastMeRAG] 从配置字典加载（与默认配置合并）")
+            return ConfigLoader._deep_merge(self.DEFAULT_CONFIG, config)
+        elif isinstance(config, (str, Path)):
+            logger.debug(f"[FastMeRAG] 从配置文件加载：{config}（与默认配置合并）")
+            file_config = ConfigLoader.load(config)
+            return ConfigLoader._deep_merge(self.DEFAULT_CONFIG, file_config)
+        raise ValueError(f"Unsupported config type: {type(config)}")
+
+    def _load_config_from_env_or_default(self) -> Dict[str, Any]:
+        """
+        从环境变量加载配置，如果环境变量不存在则使用默认配置
+        Load configuration from environment variables, use default if not set
+
+        分层配置优先级（从高到低）:
+        1. FASTME_CONFIG 环境变量指向的 YAML 配置文件（基础配置）
+        2. 环境变量覆盖层（FASTME_EMBEDDING_MODEL 等，覆盖 YAML 中的值）
+        3. 默认配置
+
+        Returns:
+            配置字典 / Configuration dictionary
+        """
+        # 1. 加载 YAML 基础配置（如果 FASTME_CONFIG 存在）
+        config_path = os.getenv("FASTME_CONFIG")
+        if config_path:
+            logger.info(f"[FastMeRAG] 从配置文件加载：{config_path}")
+            yaml_config = ConfigLoader.load(config_path)
+        else:
+            logger.info("[FastMeRAG] 无配置文件，使用默认配置")
+            yaml_config = copy.deepcopy(self.DEFAULT_CONFIG)
+
+        # 2. 构建环境变量覆盖配置
+        env_override = self._build_env_override_config()
+
+        # 3. 合并配置：环境变量覆盖 YAML 配置
+        if env_override:
+            logger.info("[FastMeRAG] 应用环境变量覆盖")
+            config = ConfigLoader._deep_merge(yaml_config, env_override)
+        else:
+            config = yaml_config
+
+        return config
+
+    def _build_env_override_config(self) -> Optional[Dict[str, Any]]:
+        """
+        从环境变量构建覆盖配置
+        Build override config from environment variables
+
+        支持的环境变量:
+        - FASTME_EMBEDDING_MODEL / EMBEDDING_MODEL: Embedding 模型名称
+        - FASTME_MODEL_CACHE_DIR / MODEL_CACHE_DIR: 模型缓存目录
+        - FASTME_LLM_MODEL / LLM_MODEL: LLM 模型名称
+        - FASTME_LLM_BASE_URL / LLM_BASE_URL: LLM API 地址
+        - FASTME_LLM_API_KEY / LLM_API_KEY: LLM API Key
+        - FASTME_VECTOR_STORE_TYPE: 向量库类型
+        - FASTME_CHROMA_PERSIST_DIR / CHROMA_DIR: Chroma 持久化目录
+        - FASTME_CHROMA_COLLECTION / CHROMA_COLLECTION: Chroma 集合名称
+        - FASTME_FAISS_INDEX_PATH / FAISS_INDEX_PATH: FAISS 索引路径
+        - FASTME_LANGUAGE: 语言设置
+        - FASTME_LOG_LEVEL: 日志级别
+
+        Returns:
+            覆盖配置字典，如果没有设置任何环境变量则返回 None
+        """
+        override: Dict[str, Any] = {}
+
+        # Embedding 配置覆盖
+        embedding_model = os.getenv("FASTME_EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL")
+        if embedding_model:
+            override["embedding"] = {"model_name": embedding_model}
+
+        model_cache_dir = os.getenv("FASTME_MODEL_CACHE_DIR") or os.getenv("MODEL_CACHE_DIR")
+        if model_cache_dir:
+            if "embedding" not in override:
+                override["embedding"] = {}
+            override["embedding"]["cache_dir"] = model_cache_dir
+
+        # LLM 配置覆盖
+        llm_model = os.getenv("FASTME_LLM_MODEL") or os.getenv("LLM_MODEL")
+        if llm_model:
+            override["llm"] = {"model_name": llm_model}
+
+        llm_base_url = os.getenv("FASTME_LLM_BASE_URL") or os.getenv("LLM_BASE_URL")
+        if llm_base_url:
+            if "llm" not in override:
+                override["llm"] = {}
+            override["llm"]["base_url"] = llm_base_url
+
+        llm_api_key = os.getenv("FASTME_LLM_API_KEY") or os.getenv("LLM_API_KEY")
+        if llm_api_key:
+            if "llm" not in override:
+                override["llm"] = {}
+            override["llm"]["api_key"] = llm_api_key
+
+        # 向量库配置覆盖
+        vector_store_type = os.getenv("FASTME_VECTOR_STORE_TYPE")
+        if vector_store_type:
+            override["vector_store"] = {"type": vector_store_type, "config": {}}
+
+        chroma_persist_dir = (
+            os.getenv("FASTME_CHROMA_PERSIST_DIR") or
+            os.getenv("CHROMA_PERSIST_DIR") or
+            os.getenv("CHROMA_DIR")
+        )
+        if chroma_persist_dir:
+            if "vector_store" not in override:
+                override["vector_store"] = {"type": "chroma", "config": {}}
+            override["vector_store"]["config"]["persist_directory"] = chroma_persist_dir
+
+        chroma_collection = os.getenv("FASTME_CHROMA_COLLECTION") or os.getenv("CHROMA_COLLECTION")
         if chroma_collection:
-            self.vector_store_config["collection_name"] = chroma_collection
+            if "vector_store" not in override:
+                override["vector_store"] = {"type": "chroma", "config": {}}
+            override["vector_store"]["config"]["collection_name"] = chroma_collection
 
-        # 保存向后兼容的属性
-        self.chroma_dir = self.vector_store_config.get("persist_directory", "./data/chroma")
-        self.chroma_collection = self.vector_store_config.get("collection_name", "fastme_rag")
+        faiss_index_path = os.getenv("FASTME_FAISS_INDEX_PATH") or os.getenv("FAISS_INDEX_PATH")
+        if faiss_index_path:
+            if "vector_store" not in override:
+                override["vector_store"] = {"type": "faiss", "config": {}}
+            override["vector_store"]["config"]["index_path"] = faiss_index_path
 
-        # [必须] 框架初始化信息
-        logger.info("=" * 60)
-        logger.info("FastMe RAG 初始化")
-        logger.info(f"  Embedding 模型：{self.embedding_model}")
-        logger.info(f"  模型缓存目录：{self.model_cache_dir}")
-        logger.info(f"  Chroma 目录：{self.chroma_dir}")
-        logger.info(f"  Chroma 集合：{self.chroma_collection}")
-        logger.info(f"  LLM 模型：{self.llm_model}")
-        logger.info(f"  LLM 地址：{self.llm_base_url}")
-        logger.info(f"  语言：{self.language}")
-        logger.info("=" * 60)
+        # 其他配置覆盖
+        language = os.getenv("FASTME_LANGUAGE")
+        if language:
+            override["language"] = language
 
-        # ========== LangChain 原语组件 ==========
+        log_level = os.getenv("FASTME_LOG_LEVEL")
+        if log_level:
+            override["log_level"] = log_level
 
-        # Embedding
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name=self.embedding_model,
-            cache_folder=self.model_cache_dir,
-            model_kwargs={"device": "cpu", "trust_remote_code": True},
-            encode_kwargs={
-                "normalize_embeddings": True,
-                "batch_size": self.embedding_batch_size
+        return override if override else None
+
+    @staticmethod
+    def _build_config_from_env() -> Dict[str, Any]:
+
+        """
+        从环境变量构建配置
+        Build configuration from environment variables
+
+        支持的环境变量 / Supported environment variables:
+        - FASTME_EMBEDDING_MODEL / EMBEDDING_MODEL: Embedding 模型名称
+        - FASTME_MODEL_CACHE_DIR / MODEL_CACHE_DIR: 模型缓存目录
+        - FASTME_LLM_MODEL / LLM_MODEL: LLM 模型名称
+        - FASTME_LLM_BASE_URL / LLM_BASE_URL: LLM API 地址
+        - FASTME_LLM_API_KEY / LLM_API_KEY: LLM API Key
+        - FASTME_VECTOR_STORE_TYPE: 向量库类型
+        - FASTME_CHROMA_PERSIST_DIR / CHROMA_DIR: Chroma 持久化目录
+        - FASTME_CHROMA_COLLECTION / CHROMA_COLLECTION: Chroma 集合名称
+        - FASTME_FAISS_INDEX_PATH / FAISS_INDEX_PATH: FAISS 索引路径
+        - FASTME_LANGUAGE: 语言设置
+
+        Returns:
+            配置字典 / Configuration dictionary
+        """
+        config: Dict[str, Any] = {
+            "vector_store": {
+                "type": os.getenv("FASTME_VECTOR_STORE_TYPE", "chroma"),
+                "config": {}
             },
-            show_progress=self.show_progress_bar
+            "embedding": {
+                "model_name": os.getenv("FASTME_EMBEDDING_MODEL") or os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3"),
+                "cache_dir": os.getenv("FASTME_MODEL_CACHE_DIR") or os.getenv("MODEL_CACHE_DIR", "./models"),
+            },
+            "llm": {
+                "model_name": os.getenv("FASTME_LLM_MODEL") or os.getenv("LLM_MODEL", "qwen-plus"),
+                "base_url": os.getenv("FASTME_LLM_BASE_URL") or os.getenv("LLM_BASE_URL", "http://localhost:8000/v1"),
+                "api_key": os.getenv("FASTME_LLM_API_KEY") or os.getenv("LLM_API_KEY", "")
+            },
+            "language": os.getenv("FASTME_LANGUAGE", "zh")
+        }
+
+        # 向量库特定配置 / Vector store specific configuration
+        vs_type = config["vector_store"]["type"]
+        if vs_type == "chroma":
+            # 支持两种环境变量名：CHROMA_DIR（旧）和 FASTME_CHROMA_PERSIST_DIR（新）
+            # Support both: CHROMA_DIR (old) and FASTME_CHROMA_PERSIST_DIR (new)
+            persist_dir = (
+                os.getenv("FASTME_CHROMA_PERSIST_DIR") or
+                os.getenv("CHROMA_PERSIST_DIR") or
+                os.getenv("CHROMA_DIR", "./data/chroma")
+            )
+            config["vector_store"]["config"]["persist_directory"] = persist_dir
+            # 支持 FASTME_CHROMA_COLLECTION（新）与 CHROMA_COLLECTION（旧别名）
+            # Support FASTME_CHROMA_COLLECTION (new) and CHROMA_COLLECTION (legacy alias)
+            collection_name = (
+                os.getenv("FASTME_CHROMA_COLLECTION")
+                or os.getenv("CHROMA_COLLECTION", "fastme_rag")
+            )
+            config["vector_store"]["config"]["collection_name"] = collection_name
+        elif vs_type == "faiss":
+            config["vector_store"]["config"]["index_path"] = (
+                os.getenv("FASTME_FAISS_INDEX_PATH") or
+                os.getenv("FAISS_INDEX_PATH", "./data/faiss_index")
+            )
+
+        return config
+
+    # =========================================================================
+    # 内部方法 - 组件创建 / Internal Methods - Component Creation
+    # =========================================================================
+
+    def _create_embeddings(self):
+        """
+        创建 Embedding 模型
+        Create Embedding model
+
+        Returns:
+            HuggingFaceEmbeddings 实例 / HuggingFaceEmbeddings instance
+        """
+        from langchain_huggingface import HuggingFaceEmbeddings
+
+        cfg = self.config.get("embedding", {})
+        return HuggingFaceEmbeddings(
+            model_name=cfg.get("model_name", "BAAI/bge-m3"),
+            cache_folder=cfg.get("cache_dir", "./models"),
+            model_kwargs={
+                "device": cfg.get("device", "cpu"),
+                "trust_remote_code": True,
+            },
+            encode_kwargs={
+                "normalize_embeddings": cfg.get("normalize", True),
+                "batch_size": cfg.get("batch_size", 32)
+            },
         )
 
-        # Vector Store（使用工厂方法）
-        self.vectorstore = VectorStoreFactory.create(
-            vector_store_type=self.vector_store_type,
+    def _create_vectorstore(self):
+        """
+        创建向量库适配器
+        Create vector store adapter
+
+        Returns:
+            VectorStoreAdapter 实例 / VectorStoreAdapter instance
+        """
+        cfg = self.config.get("vector_store", {})
+        return VectorStoreFactory.create(
+            vector_store_type=cfg.get("type", "chroma"),
             embeddings=self.embeddings,
-            vector_store_config=self.vector_store_config
+            vector_store_config=cfg.get("config", {}),
         )
 
+    def _create_llm(self):
+        """
+        创建 LLM
+        Create LLM
 
-        # LLM
-        self.llm = ChatOpenAI(
-            model_name=self.llm_model,
-            api_key=self.llm_api_key,
-            base_url=self.llm_base_url,
-            temperature=self.temperature
+        Returns:
+            ChatOpenAI 实例 / ChatOpenAI instance
+        """
+        from langchain_openai import ChatOpenAI
+
+        cfg = self.config.get("llm", {})
+        api_key = cfg.get("api_key")
+
+        # 兜底 1：配置未提供 api_key 时，从环境变量读取
+        # 支持规范名 FASTME_LLM_API_KEY 与旧别名 LLM_API_KEY
+        # Fallback 1: read from env when api_key not in config
+        if not api_key:
+            api_key = os.getenv("FASTME_LLM_API_KEY") or os.getenv("LLM_API_KEY", "")
+
+        # 兜底 2：支持 ${VAR} 语法引用环境变量
+        # 当 ConfigLoader._expand_env_vars 未能解析（环境变量当时不存在）时，
+        # 此处再次尝试解析；若 VAR 本身未设置，回退到 FASTME_LLM_API_KEY / LLM_API_KEY
+        # Fallback 2: support ${VAR} syntax for environment variable reference
+        if isinstance(api_key, str) and api_key.startswith("${") and api_key.endswith("}"):
+            var_name = api_key[2:-1]
+            api_key = (
+                os.getenv(var_name)
+                or os.getenv("FASTME_LLM_API_KEY")
+                or os.getenv("LLM_API_KEY", "")
+            )
+
+        return ChatOpenAI(
+            model_name=cfg.get("model_name", "qwen-plus"),
+            api_key=api_key,
+            base_url=cfg.get("base_url", "http://localhost:8000/v1"),
+            temperature=cfg.get("temperature", 0.2),
         )
 
-        # ========== 制造业专属组件 ==========
+    def _init_manufacturing_components(self):
+        """
+        创建制造业专属组件
+        Create manufacturing-specific components
+        """
+        cfg = self.config.get("chunking", {})
+        config_dir = Path(self.config.get("config_dir", "./config"))
 
-        # 拆解器注册表
-        self.splitter_registry = SplitterRegistry()
-        self.splitter_registry.register("log", LogSplitter(max_chunk_size=self.chunk_max_size))
-        self.splitter_registry.register("manual", ManualSplitter(max_chunk_size=self.chunk_max_size))
-        self.splitter_registry.register("business", BusinessSplitter(max_chunk_size=self.chunk_max_size))
-        self.splitter_registry.register("sop", SopSplitter(max_chunk_size=self.chunk_max_size))
+        # 拆解器注册表（按类型配置不同的 max_chunk_size）
+        # Splitter registry (different max_chunk_size per type)
+        self.splitter_registry = self._create_splitters(cfg)
 
-        # 元数据抽取器
+        # 元数据抽取器 / Metadata extractor
         self.metadata_extractor = IndustrialMetadataExtractor(
-            config_path=self.config_dir / "metadata_rules.yaml"
+            config_path=config_dir / "metadata_rules.yaml"
         )
 
-        # 场景路由
-        self.scene_router = SceneRouter(config_path=self.config_dir / "scenes.yaml")
+        # 场景路由 / Scene router
+        self.scene_router = SceneRouter(config_path=config_dir / "scenes.yaml")
 
-        # Prompt 适配器（支持多语言）
+        # Prompt 适配器 / Prompt adapter
+        language = self.config.get("language", "zh")
         self.prompt_adapter = PromptAdapter(
-            path=self.config_dir / "prompt_templates.yaml",
-            field_labels_path=self.config_dir / "field_labels.yaml",
-            language=self.language
+            path=config_dir / "prompt_templates.yaml",
+            field_labels_path=config_dir / "field_labels.yaml",
+            language=language,
         )
 
-        # 字段标签加载（支持多语言）- 用于向后兼容
-        with open(self.config_dir / "field_labels.yaml", "r", encoding="utf-8") as f:
-            all_labels = yaml.safe_load(f)
-            self.field_labels = all_labels.get(self.language, all_labels.get("zh", {}))
+    def _create_splitters(self, chunking_config: Dict[str, Any]) -> SplitterRegistry:
+        """
+        创建拆解器注册表（支持按类型配置）
+        Create splitter registry (supports per-type configuration)
 
-        # ========== 创建 Pipeline（核心业务逻辑委托给 pipeline） ==========
+        Args:
+            chunking_config: Chunking 配置 / Chunking configuration
 
-        # IngestPipeline - 文档入库流水线
+        Returns:
+            SplitterRegistry 实例 / SplitterRegistry instance
+
+        Note:
+            chunk 大小优先级 / Chunk size priority:
+            1. by_type 配置 / by_type configuration
+            2. Splitter 类的 DEFAULT_MAX_CHUNK_SIZE
+            3. default_max_size 全局默认值
+        """
+        from splitters.log_splitter import LogSplitter
+        from splitters.manual_splitter import ManualSplitter
+        from splitters.business_splitter import BusinessSplitter
+        from splitters.sop_splitter import SopSplitter
+
+        registry = SplitterRegistry()
+        default_max = chunking_config.get("default_max_size", 1000)
+        by_type = chunking_config.get("by_type", {})
+
+        def get_size(doc_type: str, splitter_cls) -> int:
+            """获取指定类型的 max_chunk_size / Get max_chunk_size for specified type"""
+            # 优先级 1: by_type 配置 / Priority 1: by_type configuration
+            if doc_type in by_type:
+                return by_type[doc_type]
+            # 优先级 2: Splitter 类默认值 / Priority 2: Splitter class default
+            if hasattr(splitter_cls, "DEFAULT_MAX_CHUNK_SIZE"):
+                return splitter_cls.DEFAULT_MAX_CHUNK_SIZE
+            # 优先级 3: 全局默认值 / Priority 3: Global default
+            return default_max
+
+        registry.register("log", LogSplitter(max_chunk_size=get_size("log", LogSplitter)))
+        registry.register("manual", ManualSplitter(max_chunk_size=get_size("manual", ManualSplitter)))
+        registry.register("business", BusinessSplitter(max_chunk_size=get_size("business", BusinessSplitter)))
+        registry.register("sop", SopSplitter(max_chunk_size=get_size("sop", SopSplitter)))
+
+        return registry
+
+    def _init_pipelines(self):
+        """
+        创建 Pipeline
+        Create pipelines
+        """
+        cfg = self.config.get("ingest_pipeline", {})
+
+        # IngestPipeline
         self.ingest_pipeline = IngestPipeline(
             document_loader=SimpleDocumentLoader(),
             splitter_registry=self.splitter_registry,
             metadata_extractor=self.metadata_extractor,
             vector_store=self.vectorstore,
-            ingest_batch_size=self.ingest_batch_size,
-            show_progress_bar=self.show_progress_bar,
+            ingest_batch_size=cfg.get("batch_size", 32),
+            show_progress_bar=cfg.get("show_progress_bar", False),
         )
 
-        # 创建场景化检索器（使用工厂方法）
+        # 场景化检索器 / Scene-aware retriever
+        vector_store_type = self.config.get("vector_store", {}).get("type", "chroma")
         self.scene_aware_retriever = RetrieverFactory.create(
-            vector_store_type=self.vector_store_type,
+            vector_store_type=vector_store_type,
             vector_store_adapter=self.vectorstore,
             scene_router=self.scene_router,
         )
 
-        # ChatPipeline - 对话流水线（使用 SceneAwareRetriever）
+        # ChatPipeline（传入 chat_pipeline 配置：default_top_k / max_context_length）
+        # ChatPipeline (pass chat_pipeline config: default_top_k / max_context_length)
+        chat_cfg = self.config.get("chat_pipeline", {})
         self.chat_pipeline = ChatPipeline(
             scene_aware_retriever=self.scene_aware_retriever,
             prompt_adapter=self.prompt_adapter,
             llm=self.llm,
+            default_top_k=chat_cfg.get("default_top_k", 5),
+            max_context_length=chat_cfg.get("max_context_length"),
         )
 
-        # ========== 直接绑定 Pipeline 方法（消除委托重复） ==========
-        # 文档入库
+    def _bind_methods(self):
+        """
+        绑定业务方法（委托给 Pipeline）
+        Bind business methods (delegate to pipelines)
+        """
+        # IngestPipeline 方法 / IngestPipeline methods
         self.ingest = self.ingest_pipeline.ingest
         self.batch_ingest = self.ingest_pipeline.batch_ingest
-        # 场景化问答
+
+        # ChatPipeline 方法 / ChatPipeline methods
         self.chat = self.chat_pipeline.chat
         self.chat_stream = self.chat_pipeline.chat_stream
-        # 记忆管理
         self.create_memory = self.chat_pipeline.create_memory
         self.get_memory = self.chat_pipeline.get_memory
         self.clear_memory = self.chat_pipeline.clear_memory
         self.chat_with_memory = self.chat_pipeline.chat_with_memory
 
-    # ========== 配置工具 ==========
+    def _log_initialization(self):
+        """
+        记录初始化信息
+        Log initialization information
+        """
+        vs_cfg = self.config.get("vector_store", {})
+        emb_cfg = self.config.get("embedding", {})
+        llm_cfg = self.config.get("llm", {})
+
+        logger.info("=" * 60)
+        logger.info("FastMe RAG 初始化完成 / FastMe RAG Initialization Complete")
+        logger.info(f"  向量库 / Vector Store: {vs_cfg.get('type', 'chroma')}")
+        logger.info(f"  Embedding: {emb_cfg.get('model_name', 'BAAI/bge-m3')}")
+        logger.info(f"  LLM: {llm_cfg.get('model_name', 'qwen-plus')}")
+        logger.info(f"  语言 / Language: {self.config.get('language', 'zh')}")
+        logger.info("=" * 60)
+
+    # =========================================================================
+    # 配置管理方法 / Configuration Management Methods
+    # =========================================================================
 
     def add_scene(
         self,
@@ -295,7 +751,26 @@ class FastMeRAG:
         source_fields: list = None,
         description: str = ""
     ):
-        """动态添加场景配置"""
+        """
+        动态添加场景配置
+        Dynamically add scene configuration
+
+        Args:
+            name: 场景名称 / Scene name
+            doc_type: 文档类型 / Document type
+            prompt_template: Prompt 模板名称 / Prompt template name
+            top_k: 召回数量 / Retrieval count
+            source_fields: 溯源字段列表 / Source field list
+            description: 场景描述 / Scene description
+
+        Example:
+            >>> rag.add_scene(
+            ...     name="custom_scene",
+            ...     doc_type="log",
+            ...     prompt_template="fault_diagnosis",
+            ...     top_k=10
+            ... )
+        """
         self.scene_router.scene_config[name] = {
             "doc_type": doc_type,
             "prompt_template": prompt_template,
@@ -303,51 +778,111 @@ class FastMeRAG:
             "source_fields": source_fields or ["chunk_id", "doc_id", "doc_type", "source"],
             "description": description
         }
-        # 注意：SceneAwareRetriever 会自动使用最新的 scene_config
-        # 无需手动更新检索器
 
     def add_metadata_rule(self, field: str, patterns: list, description: str = ""):
-        """动态添加元数据抽取规则"""
-        # 委托给 metadata_extractor
+        """
+        动态添加元数据抽取规则
+        Dynamically add metadata extraction rule
+
+        Args:
+            field: 字段名称 / Field name
+            patterns: 正则模式列表 / Regex pattern list
+            description: 规则描述 / Rule description
+
+        Example:
+            >>> rag.add_metadata_rule(
+            ...     field="custom_field",
+            ...     patterns=[r"模式1", r"模式2"],
+            ...     description="自定义字段抽取"
+            ... )
+        """
         self.metadata_extractor.add_metadata_rule(field, patterns, description)
 
     def update_scene_top_k(self, scene: str, top_k: int):
-        """更新场景的 top_k 配置"""
+        """
+        更新场景的 top_k 配置
+        Update scene top_k configuration
+
+        Args:
+            scene: 场景名称 / Scene name
+            top_k: 新的召回数量 / New retrieval count
+        """
         if scene in self.scene_router.scene_config:
             self.scene_router.scene_config[scene]["top_k"] = top_k
 
     def set_language(self, language: str):
         """
         切换语言
+        Switch language
 
         Args:
-            language: 语言代码 ("zh" | "en")
+            language: 语言代码 ("zh" | "en") / Language code
 
-        Raises:
-            ValueError: 当不支持该语言时
+        Example:
+            >>> rag.set_language("en")  # 切换到英文 / Switch to English
         """
-        # 委托给 PromptAdapter 处理语言切换和字段标签加载
         self.prompt_adapter.set_language(language)
         self.language = language
-        # 同步 field_labels 以便向后兼容
-        self.field_labels = self.prompt_adapter.field_labels
 
-    # ========== 查询和统计 ==========
+    # =========================================================================
+    # 查询和统计方法 / Query and Statistics Methods
+    # =========================================================================
 
     def get_scenes(self) -> list:
-        """获取所有可用场景"""
+        """
+        获取所有可用场景
+        Get all available scenes
+
+        Returns:
+            场景名称列表 / List of scene names
+
+        Example:
+            >>> scenes = rag.get_scenes()
+            >>> print(scenes)
+            ['fault_diagnosis', 'manual_query', 'work_order_trace', 'default']
+        """
         return list(self.scene_router.scene_config.keys())
 
     def get_doc_types(self) -> list:
-        """获取所有支持的文档类型"""
+        """
+        获取所有支持的文档类型
+        Get all supported document types
+
+        Returns:
+            文档类型列表 / List of document types
+
+        Example:
+            >>> doc_types = rag.get_doc_types()
+            >>> print(doc_types)
+            ['log', 'manual', 'business', 'sop']
+        """
         return list(self.splitter_registry._splitters.keys())
 
     def get_vector_count(self) -> int:
-        """获取向量库中的向量总数"""
+        """
+        获取向量库中的向量总数
+        Get total vector count in vector store
+
+        Returns:
+            向量数量 / Number of vectors
+
+        Example:
+            >>> count = rag.get_vector_count()
+            >>> print(f"向量总数 / Total vectors: {count}")
+        """
         return self.vectorstore.get_count()
 
     def delete_collection(self):
-        """删除当前集合"""
+        """
+        删除当前集合
+        Delete current collection
+
+        警告：此操作不可逆，会删除所有数据
+        Warning: This operation is irreversible and deletes all data
+
+        Example:
+            >>> rag.delete_collection()  # 删除所有向量数据 / Delete all vector data
+        """
         try:
             self.vectorstore.delete_collection()
         except Exception:

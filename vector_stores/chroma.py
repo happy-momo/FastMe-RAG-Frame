@@ -190,8 +190,23 @@ class ChromaAdapter(VectorStoreAdapter):
 
         Returns:
             向量数量 / Number of vectors
+
+        Note:
+            优先使用 Chroma 内部 _collection.count() 方法，时间复杂度 O(1)
+            Prefers Chroma's internal _collection.count() method, O(1) time complexity
+            如果不可用，回退到 get() 方法（性能较差）
+            Falls back to get() method if unavailable (poorer performance)
         """
-        return len(self._chroma.get()["ids"])
+        try:
+            # 使用 Chroma 内部计数方法，O(1) 时间复杂度
+            return self._chroma._collection.count()
+        except (AttributeError, KeyError) as e:
+            # 向后兼容：如果 _collection 不可用，回退到原方法
+            logger.warning(
+                f"[ChromaAdapter] _collection.count() 不可用：{e}, "
+                f"使用备用方法"
+            )
+            return len(self._chroma.get()["ids"])
 
     def delete_collection(self) -> None:
         """

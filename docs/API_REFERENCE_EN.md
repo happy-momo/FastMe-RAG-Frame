@@ -125,6 +125,8 @@ In review mode:
 }
 ```
 
+> **Note**: `ingest()` automatically calls `persist()` after ingestion to write data to disk (especially important for FAISS backend to ensure data survives process exit); Chroma behavior is unchanged. `batch_ingest()`'s `persist_interval` parameter semantics remain unchanged (memory cleanup interval).
+
 **Example**:
 
 ```python
@@ -321,6 +323,8 @@ def chat_with_memory(
 | `scene` | str | `"default"` | Scene name |
 | `filters` | dict | `None` | Filter conditions |
 | `top_k` | int | Scene config | Retrieval count |
+
+> **Note**: When the LLM returns an empty answer, the framework returns a fallback text "Sorry, failed to generate a valid answer..." but **does not store it in conversation memory**, preventing contamination of multi-turn context.
 
 **Example**:
 

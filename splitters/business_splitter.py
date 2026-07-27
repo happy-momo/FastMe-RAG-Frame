@@ -39,9 +39,13 @@ class BusinessSplitter(BaseSplitter):
         >>> splitter = BusinessSplitter(max_chunk_size=800)  # 自定义 800 字 / Custom 800 chars
     """
 
-    def __init__(self, max_chunk_size: int = 1000):
-        # 调用基类构造函数
-        super().__init__(max_chunk_size)
+    # 工单推荐 chunk 大小 / Recommended chunk size for business documents
+    DEFAULT_MAX_CHUNK_SIZE = 1000
+
+    def __init__(self, max_chunk_size: int = None):
+        # 调用基类构造函数，使用类默认值或传入值
+        # Call base constructor, use class default or provided value
+        super().__init__(max_chunk_size or self.DEFAULT_MAX_CHUNK_SIZE)
         # 工单编号匹配模式
         self.work_order_patterns = [
             # 工单 ID/工单编号

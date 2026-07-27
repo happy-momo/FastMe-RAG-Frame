@@ -207,12 +207,24 @@ class IngestPipeline:
             # 构建 LangChain Document 列表
             docs = []
             for chunk in batch_chunks:
+                # 防御性检查：确保 doc_type 存在
+                if not chunk.doc_type:
+                    logger.error(
+                        f"[入库] chunk {chunk.chunk_id} 缺失 doc_type 字段. "
+                        f"file={document.file_name}, doc_id={document.doc_id}"
+                    )
+                    raise ValueError(
+                        f"Chunk {chunk.chunk_id} missing 'doc_type'. "
+                        f"Please ensure splitter sets doc_type correctly."
+                    )
+
                 docs.append(Document(
                     page_content=chunk.text,
                     metadata={
                         "chunk_id": chunk.chunk_id,
                         "doc_id": chunk.doc_id,
-                        **chunk.metadata
+                        "doc_type": chunk.doc_type,  # 显式传递，不依赖 chunk.metadata
+                        **chunk.metadata            # 其他元数据
                     }
                 ))
 
@@ -222,6 +234,19 @@ class IngestPipeline:
 
             # 批次完成日志
             logger.debug(f"[入库] 批次 {batch_idx + 1}/{num_batches} 完成：入库 {len(batch_chunks)} 个 chunk")
+
+        # 6. 持久化到磁盘
+        #    FAISS 为纯内存索引，必须显式 save_local 才能落盘（否则进程退出数据丢失）
+        #    Chroma 由 PersistentClient 自动持久化，此调用幂等无害
+        #    Persist to disk:
+        #    - FAISS is in-memory and requires explicit save_local (otherwise data is lost on exit)
+        #    - Chroma auto-persists via PersistentClient; this call is idempotent
+        try:
+            self.vector_store.persist()
+        except Exception as e:
+            logger.warning(
+                f"[入库] 持久化失败：{e}（数据已写入内存索引，但进程退出后可能丢失）"
+            )
 
         # [必须] 入库完成信息
         vector_count = self.vector_store.get_count()

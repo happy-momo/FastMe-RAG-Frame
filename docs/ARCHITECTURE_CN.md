@@ -100,6 +100,7 @@ class FastMeRAG:
 - 分批处理避免内存峰值
 - 支持审核模式预览切片
 - 定期内存清理优化
+- 入库完成后自动 persist（FAISS 数据落盘，失败仅告警不中断，Chroma 保持自动持久化行为不变）
 
 ### 3. 对话流水线 (core/chat_pipeline.py)
 
@@ -340,6 +341,8 @@ yaml.safe_load() -> scene_config (dict)
     v
 存储到实例属性，供后续路由使用
 ```
+
+**配置隔离**: 配置合并采用深拷贝策略，多 `FastMeRAG` 实例的配置互不影响，避免 `DEFAULT_CONFIG` 被污染。
 
 ---
 

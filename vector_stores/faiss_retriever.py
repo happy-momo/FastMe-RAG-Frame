@@ -43,9 +43,26 @@ class FAISSRetriever(BaseRetriever, ResultConverterMixin):
         ... )
     """
 
-    def __init__(self, adapter: VectorStoreAdapter, post_filter_multiplier: int = 5):
+    def __init__(
+        self,
+        adapter: VectorStoreAdapter,
+        post_filter_multiplier: int = 5,
+        max_multiplier: int = 50,
+        max_attempts: int = 3
+    ):
+        """
+        初始化 FAISSRetriever
+
+        Args:
+            adapter: FAISSAdapter 实例 / FAISSAdapter instance
+            post_filter_multiplier: 初始后过滤倍数，默认 5 / Initial post-filter multiplier, default 5
+            max_multiplier: 最大后过滤倍数上限，默认 50 / Max post-filter multiplier, default 50
+            max_attempts: 最大重试次数，默认 3 / Max retry attempts, default 3
+        """
         self.adapter = adapter
         self.post_filter_multiplier = post_filter_multiplier
+        self.max_multiplier = max_multiplier
+        self.max_attempts = max_attempts
 
     def retrieve(
         self,
@@ -70,12 +87,62 @@ class FAISSRetriever(BaseRetriever, ResultConverterMixin):
             results = self.adapter.similarity_search_with_score(query=query, k=top_k)
             return self._to_fastme_results(results)
 
-        # 有过滤时，先召回更多结果
-        recall_k = top_k * self.post_filter_multiplier
-        results = self.adapter.similarity_search_with_score(query=query, k=recall_k)
+        # 动态调整召回倍数，直到满足 top_k 或达到上限
+        current_multiplier = self.post_filter_multiplier
+        filtered_results: List[FastMeSearchResult] = []
+        all_results: List = []
 
-        # 后过滤
-        filtered_results = self._filter_results(results, filters)
+        for attempt in range(self.max_attempts):
+            recall_k = top_k * current_multiplier
+            results = self.adapter.similarity_search_with_score(query=query, k=recall_k)
+            all_results = results
+
+            logger.debug(
+                f"[FAISSRetriever] 尝试 {attempt + 1}/{self.max_attempts}: "
+                f"recall_k={recall_k}, 召回 {len(results)} 条"
+            )
+
+            # 后过滤
+            filtered_results = self._filter_results(results, filters)
+
+            if len(filtered_results) >= top_k:
+                logger.debug(
+                    f"[FAISSRetriever] 过滤后 {len(filtered_results)} 条，满足 top_k={top_k}"
+                )
+                break
+
+            # 结果不足，增加倍数重试
+            if attempt < self.max_attempts - 1:
+                current_multiplier = min(current_multiplier * 2, self.max_multiplier)
+                logger.debug(
+                    f"[FAISSRetriever] 过滤后结果不足 ({len(filtered_results)} < {top_k}), "
+                    f"增加倍数到 {current_multiplier} 重试"
+                )
+
+        # 记录最终结果
+        logger.info(
+            f"[FAISSRetriever] 检索完成：召回={len(all_results)}, "
+            f"过滤后={len(filtered_results)}, 返回={min(len(filtered_results), top_k)}"
+        )
+
+        # 结果不足时警告
+        if len(filtered_results) < top_k:
+            logger.warning(
+                f"[FAISSRetriever] 过滤后结果不足：期望 {top_k}, 实际 {len(filtered_results)}. "
+                f"可能原因：过滤条件过严或向量分布不均。"
+                f"初始倍数={self.post_filter_multiplier}, 最终倍数={current_multiplier}."
+            )
+
+        # 处理空结果场景
+        if len(all_results) == 0:
+            logger.warning(f"[FAISSRetriever] 未召回任何向量，查询：{query[:50]}...")
+
+        # 处理所有结果都被过滤的场景
+        if len(all_results) > 0 and len(filtered_results) == 0:
+            logger.warning(
+                f"[FAISSRetriever] 所有召回结果都被过滤掉。召回={len(all_results)}, "
+                f"过滤条件={filters}"
+            )
 
         # 截断到 top_k
         return filtered_results[:top_k]
@@ -124,6 +191,8 @@ class FAISSRetriever(BaseRetriever, ResultConverterMixin):
             field_value = metadata.get(condition.field)
 
             if field_value is None:
+                # 记录缺失的字段，便于调试
+                logger.debug(f"[FAISSRetriever] 过滤字段 {condition.field} 不存在于 metadata")
                 return False
 
             if not self._match_condition(field_value, condition.operator, condition.value):

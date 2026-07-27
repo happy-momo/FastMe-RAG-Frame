@@ -43,7 +43,7 @@
 | 🏷️ **工业元数据抽取** | 自动提取设备 ID、产线号、故障码、工单号等 16 个工业字段 |
 | 🌐 **多语言支持** | 中英文界面切换，字段标签可配置 |
 | 🔌 **可插拔架构** | 基于 LangChain，Embedding/向量库/LLM 全部可配置替换 |
-| 💾 **多向量库支持** | 支持 Chroma（持久化）、FAISS（内存）等向量数据库 |
+| 💾 **多向量库支持** | 支持 Chroma（持久化）、FAISS（内存/持久化）等向量数据库 |
 | ⚙️ **配置化驱动** | YAML 配置文件定义场景、Prompt、字段标签，无需改代码 |
 | 📊 **流式输出** | 支持流式问答，首字更快，体验更佳 |
 | 🎛️ **灵活配置** | chunk 尺寸、批次大小、进度条等参数可自由调整 |
@@ -58,44 +58,84 @@
 pip install -r requirements.txt
 ```
 
+> **💡 依赖说明**：`requirements.txt` 包含框架所需的所有依赖，包括 `python-docx`（用于 DOCX 文档解析，v1.1.0+）。
+
 ### 2. 配置环境变量
 
 ```bash
-# 复制环境变量模板
+# 复制环境变量模板 / Copy environment variable template
 cp .env.example .env
 
 # 编辑 .env 文件，配置本地模型和 LLM 地址
+# Edit .env file to configure local model and LLM endpoint
+
+# LLM 配置 / LLM Configuration
 LLM_BASE_URL=http://localhost:8000/v1
-LLM_API_KEY=your-api-key-here
+FASTME_LLM_API_KEY=your-api-key-here
 LLM_MODEL=qwen-plus
 
 # Embedding 模型配置（支持本地路径或 HuggingFace 模型名）
+# Embedding model configuration (supports local path or HuggingFace model name)
 # 方式 1：使用本地已下载的模型（推荐，避免重复下载）
+# Option 1: Use locally downloaded model (recommended, avoids re-downloading)
 EMBEDDING_MODEL=./models/bge-m3
 
 # 方式 2：使用 HuggingFace 模型名（首次使用会自动下载）
+# Option 2: Use HuggingFace model name (will auto-download on first use)
 # EMBEDDING_MODEL=BAAI/bge-m3
 
-# 可选：模型缓存目录（当使用 HuggingFace 模型名时生效）
-# MODEL_CACHE_DIR=./models
+# 向量库配置 / Vector Store Configuration
+# 向量库类型：chroma | faiss（切换只需修改这一行）
+# Vector store type: chroma | faiss (change this line to switch)
+FASTME_VECTOR_STORE_TYPE=chroma
 ```
 
-> **💡 提示**：`FastMeRAG` 会自动从项目根目录的 `.env` 文件读取配置，无需手动传入参数。
+> **💡 提示 / Tip**：`FastMeRAG` 会自动从项目根目录的 `.env` 文件读取配置，无需手动传入参数。
+> `FastMeRAG` automatically reads configuration from the `.env` file in the project root, no need to pass parameters manually.
 
 ### 3. 最简单的使用方式
 
 ```python
 from app_factory import FastMeRAG
 
-# 初始化（默认配置）
+# 初始化（自动读取 .env 配置）
+# Initialize (automatically reads .env configuration)
 rag = FastMeRAG()
 
-# 文档入库
+# 文档入库 / Document ingestion
 rag.ingest("设备手册.pdf", doc_type="manual")
 
-# 场景化问答
+# 场景化问答 / Scene-aware Q&A
 result = rag.chat("设备报警怎么处理？", scene="fault_diagnosis")
 print(result["answer"])
+```
+
+### 4. 使用配置文件（高级）
+
+```python
+from app_factory import FastMeRAG
+
+# 方式 1：从 YAML 配置文件加载
+# Method 1: Load from YAML config file
+rag = FastMeRAG.from_config("./config/fastme_chroma.yaml")
+
+# 方式 2：从配置字典加载
+# Method 2: Load from config dictionary
+rag = FastMeRAG(config={
+    "vector_store": {
+        "type": "faiss",
+        "config": {"index_path": "./data/faiss_index"}
+    },
+    "embedding": {"model_name": "BAAI/bge-m3"},
+    "llm": {"model_name": "qwen-plus"},
+})
+
+# 方式 3：加载配置并覆盖部分值
+# Method 3: Load config and override partial values
+rag = FastMeRAG.from_config(
+    "./config/fastme_chroma.yaml",
+    overrides={"vector_store": {"config": {"collection_name": "new_coll"}}}
+)
 ```
 
 ---
@@ -149,40 +189,82 @@ print(result["answer"])
 **完整的 `.env` 配置示例：**
 
 ```bash
-# ===== LLM 配置 =====
+# ===== LLM 配置 / LLM Configuration =====
 LLM_BASE_URL=http://localhost:8000/v1
-LLM_API_KEY=your-api-key-here
+FASTME_LLM_API_KEY=your-api-key-here
 LLM_MODEL=qwen-plus
 
-# ===== Embedding 模型配置 =====
+# ===== Embedding 模型配置 / Embedding Model Configuration =====
 # 方式 1：使用本地已下载的模型（推荐，避免重复下载）
+# Option 1: Use locally downloaded model (recommended, avoids re-downloading)
 EMBEDDING_MODEL=./models/bge-m3
 
 # 方式 2：使用 HuggingFace 模型名（首次使用会自动下载）
+# Option 2: Use HuggingFace model name (will auto-download on first use)
 # EMBEDDING_MODEL=BAAI/bge-m3
 
 # 可选：模型缓存目录（当使用 HuggingFace 模型名时生效）
+# Optional: Model cache directory (only used when EMBEDDING_MODEL is a HuggingFace model name)
 # MODEL_CACHE_DIR=./models
 
-# ===== 其他配置 =====
+# ===== 向量库配置 / Vector Store Configuration =====
+# 向量库类型：chroma | faiss
+# 切换向量库只需修改这一行即可
+# Vector store type: change this line to switch vector store
+FASTME_VECTOR_STORE_TYPE=chroma
+
+# Chroma 配置（FASTME_VECTOR_STORE_TYPE=chroma 时生效）
+# Chroma configuration (effective when FASTME_VECTOR_STORE_TYPE=chroma)
+CHROMA_PERSIST_DIR=./data/chroma
+CHROMA_COLLECTION=fastme_rag
+
+# FAISS 配置（FASTME_VECTOR_STORE_TYPE=faiss 时生效）
+# FAISS configuration (effective when FASTME_VECTOR_STORE_TYPE=faiss)
+FAISS_INDEX_PATH=./data/faiss_index
+
+# ===== 其他配置 / Other Configuration =====
 # FASTME_LANGUAGE=zh  # 界面语言，可选：zh（中文）| en（英文）
 ```
 
+### 切换向量库 / Switching Vector Store
+
+**只需修改一行配置即可切换向量库：**
+
+```bash
+# 使用 Chroma（默认）/ Use Chroma (default)
+FASTME_VECTOR_STORE_TYPE=chroma
+
+# 切换到 FAISS / Switch to FAISS
+FASTME_VECTOR_STORE_TYPE=faiss
+```
+
+| 向量库 | 特点 | 适用场景 |
+|--------|------|----------|
+| **Chroma** | 持久化存储，支持元数据过滤 | 生产环境，需要数据持久化 |
+| **FAISS** | 内存索引，支持自动持久化，速度极快 | 开发测试，对性能要求高的场景 |
+
 ### 环境变量优先级
 
-配置值的优先级顺序：**传入参数 > `.env` 文件 > 代码默认值**
+配置值的优先级顺序：**配置文件 > 环境变量 > 代码默认值**
 
 ```python
 from app_factory import FastMeRAG
 
 # 场景 1：不传参数，从 .env 读取（推荐）
+# Scenario 1: No parameters, read from .env (recommended)
 rag = FastMeRAG()  # 使用 .env 中的配置
 
-# 场景 2：传入参数，覆盖 .env
-rag = FastMeRAG(
-    embedding_model="./models/bge-m3",  # 覆盖 .env 中的 EMBEDDING_MODEL
-    llm_model="qwen-plus"               # 覆盖 .env 中的 LLM_MODEL
-)
+# 场景 2：从配置文件加载
+# Scenario 2: Load from config file
+rag = FastMeRAG.from_config("./config/fastme_faiss.yaml")
+
+# 场景 3：使用配置字典
+# Scenario 3: Use config dictionary
+rag = FastMeRAG(config={
+    "vector_store": {"type": "faiss"},
+    "embedding": {"model_name": "BAAI/bge-m3"},
+    "llm": {"model_name": "qwen-plus"}
+})
 ```
 
 ### 本地模型 vs HuggingFace 模型
@@ -280,6 +362,11 @@ rag = FastMeRAG(
 > - 如果传入了参数（如 `embedding_model="./models/bge-m3"`），使用参数值
 > - 如果没有传入参数，从 `.env` 文件读取
 > - 如果 `.env` 中也没有配置，使用代码中的默认值
+>
+> **YAML 配置新增生效字段**：
+> - `embedding.device`：指定 Embedding 模型运行设备（如 `cuda` / `cpu`），之前被硬编码忽略，现已生效
+> - `chat_pipeline.default_top_k`：对话管道的默认召回数量，优先级低于调用方显式传入和场景配置
+> - `chat_pipeline.max_context_length`：上下文最大字符数，超过则截断（追加 `...(上下文已截断)`），设为 `null` 不限制
 
 #### 配置示例
 
@@ -387,6 +474,8 @@ result = rag.ingest(
     ]
 }
 ```
+
+> **💡 FAISS 持久化说明**：`ingest()` 在入库完成后会自动调用 `persist()` 将数据写入磁盘，确保进程退出后数据不丢失。Chroma 后端行为不变（自动持久化）。`batch_ingest()` 的 `persist_interval` 参数含义不变（内存清理间隔）。
 
 **示例：**
 
@@ -645,6 +734,8 @@ result = rag.chat_with_memory(
     top_k: int = None                 # 召回数量（可选）
 )
 ```
+
+> **💡 记忆保护**：当 LLM 返回空回答时，框架会返回兜底文本"抱歉，未能生成有效回答…"，但**不会将其存入对话记忆**，避免污染多轮上下文。
 
 #### `get_memory()` - 获取会话记忆
 

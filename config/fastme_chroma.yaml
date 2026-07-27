@@ -1,0 +1,87 @@
+# FastMe RAG Configuration File - Chroma Vector Store
+# FastMe RAG 配置文件 - Chroma 向量库版本
+#
+# 使用说明 / Usage Instructions:
+# 1. 复制此文件并根据需要修改配置
+#    Copy this file and modify configuration as needed
+# 2. 在代码中使用：FastMeRAG.from_config("./config/fastme_chroma.yaml")
+#    Use in code: FastMeRAG.from_config("./config/fastme_chroma.yaml")
+# 3. 支持 ${VAR_NAME} 语法引用环境变量
+#    Supports ${VAR_NAME} syntax for environment variable references
+
+# =============================================================================
+# 向量库配置 / Vector Store Configuration
+# =============================================================================
+vector_store:
+  type: chroma  # 向量库类型：chroma, faiss, milvus, qdrant, weaviate
+                # / Vector store type
+  config:
+    persist_directory: ./data/chroma  # Chroma 持久化目录 / Persist directory
+    collection_name: fastme_rag       # 集合名称 / Collection name
+
+# =============================================================================
+# Embedding 模型配置 / Embedding Model Configuration
+# =============================================================================
+embedding:
+  model_name: BAAI/bge-m3    # Embedding 模型名称（本地路径） / Model name (local path)
+  cache_dir: ./models            # 模型缓存目录 / Model cache directory
+  batch_size: 32                 # Embedding 批量大小 / Batch size
+  device: cpu                    # 计算设备：cpu 或 cuda / Computing device
+  normalize: true                # 是否归一化 / Whether to normalize embeddings
+
+# =============================================================================
+# LLM 配置 / LLM Configuration
+# =============================================================================
+llm:
+  model_name: qwen-plus           # LLM 模型名称 / Model name
+  base_url: http://localhost:8000/v1  # LLM API 地址 / API base URL
+  api_key: ${FASTME_LLM_API_KEY}    # API Key（从环境变量读取，规范名）
+                                  # 旧别名 ${LLM_API_KEY} 仍受支持
+                                  # / API Key (read from env var)
+  temperature: 0.2                # 温度参数 / Temperature parameter
+  max_tokens: 2048                # 最大生成长度 / Max generation length
+
+# =============================================================================
+# Chunking 配置 / Chunking Configuration
+# =============================================================================
+# 不同文档类型的推荐 chunk 大小：
+# / Recommended chunk sizes for different document types:
+#
+# - log: 600 - 日志条目通常较短，按时间戳分割
+#        Log entries are typically short, split by timestamp
+#
+# - manual: 1500 - 章节结构完整，需要保留上下文
+#           Complete chapter structure, need to preserve context
+#
+# - business: 1000 - 业务记录中等长度
+#             Business records are medium length
+#
+# - sop: 800 - 操作步骤需要精确，不宜过长
+#          Operation steps need precision, should not be too long
+
+chunking:
+  default_max_size: 1000       # 全局默认 chunk 大小 / Global default chunk size
+  by_type:                     # 按文档类型覆盖 / Override by document type
+    log: 600
+    manual: 1500
+    business: 1000
+    sop: 800
+
+# =============================================================================
+# Pipeline 配置 / Pipeline Configuration
+# =============================================================================
+ingest_pipeline:
+  batch_size: 32              # 入库分批大小 / Ingestion batch size
+  show_progress_bar: false    # 是否显示进度条 / Whether to show progress bar
+
+chat_pipeline:
+  default_top_k: 5            # 默认召回数量 / Default retrieval count
+  max_context_length: 4096    # 最大上下文长度 / Max context length
+
+# =============================================================================
+# 其他配置 / Other Configuration
+# =============================================================================
+language: zh                  # 语言：zh (中文) | en (English)
+config_dir: ./config          # 配置文件目录 / Config directory
+data_dir: ./data              # 数据目录 / Data directory
+log_level: INFO               # 日志级别：DEBUG, INFO, WARNING, ERROR
