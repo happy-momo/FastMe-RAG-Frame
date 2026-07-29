@@ -141,6 +141,7 @@ class FastMeRAG:
             "temperature": 0.2,
             "max_tokens": 2048,
             "streaming": True,             # 是否启用流式输出
+            "max_retries": 2,              # LLM 请求失败重试次数
         },
         # Chunking 配置 / Chunking Configuration
         "chunking": {
@@ -594,6 +595,9 @@ class FastMeRAG:
             api_key=api_key,
             base_url=cfg.get("base_url", "http://localhost:8000/v1"),
             temperature=cfg.get("temperature", 0.2),
+            max_tokens=cfg.get("max_tokens"),
+            streaming=cfg.get("streaming", False),
+            max_retries=cfg.get("max_retries", 2),
         )
 
     def _init_manufacturing_components(self):

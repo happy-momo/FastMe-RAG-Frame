@@ -139,6 +139,37 @@ class ResultConverterMixin:
         ...         return self._to_fastme_results(results)  # 使用 mixin 方法 / Use mixin method
     """
 
+    def _distance_to_similarity(self, distance: float) -> float:
+        """
+        将向量距离转换为 [0, 1] 区间的相似度分数（越高越相关）
+        Convert a vector distance to a similarity score in [0, 1] (higher = more relevant)
+
+        FAISS 与 Chroma 的 similarity_search_with_score 返回的都是 L2 距离
+        （越小越相关，且通常 > 1），并非 [0,1] 相似度。此处用 1/(1+distance)
+        单调映射到 (0, 1]：
+        - distance = 0  -> 1.0（完全匹配）
+        - distance 越大 -> 越接近 0（越不相关）
+
+        该映射对距离是否为平方、embeddings 是否归一化均成立，保证跨向量库一致。
+        This mapping holds regardless of whether the distance is squared or whether
+        embeddings are normalized, ensuring cross-vector-store consistency.
+
+        Args:
+            distance: 向量库返回的原始距离 / Raw distance returned by the vector store
+
+        Returns:
+            [0, 1] 相似度分数 / Similarity score in [0, 1]
+        """
+        if distance is None:
+            return 0.0
+        try:
+            d = float(distance)
+        except (TypeError, ValueError):
+            return 0.0
+        if d < 0:
+            d = 0.0
+        return 1.0 / (1.0 + d)
+
     def _to_fastme_results(self, results: List[Tuple[Document, float]]) -> List[FastMeSearchResult]:
         """
         将 (Document, score) 转换为 FastMeSearchResult 列表
@@ -146,9 +177,13 @@ class ResultConverterMixin:
 
         Args:
             results: [(Document, score), ...] 列表 / List of (Document, score) tuples
+                     score 为向量库返回的 L2 距离（越小越相关）
+                     / score is the L2 distance returned by the vector store (lower = more similar)
 
         Returns:
             FastMeSearchResult 列表 / List of FastMeSearchResult
+            score 已归一化为 [0,1] 相似度（越大越相关）
+            / score normalized to [0,1] similarity (higher = more relevant)
 
         Example:
             >>> results = adapter.similarity_search_with_score(query, k=5)
@@ -159,7 +194,7 @@ class ResultConverterMixin:
                 chunk_id=doc.metadata.get("chunk_id"),
                 doc_id=doc.metadata.get("doc_id"),
                 doc_type=doc.metadata.get("doc_type"),
-                score=float(score) if score is not None else 0.0,
+                score=self._distance_to_similarity(score),
                 text=doc.page_content,
                 metadata=doc.metadata
             )
