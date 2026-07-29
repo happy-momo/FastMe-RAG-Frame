@@ -107,7 +107,10 @@ class FastMeSearchResult:
         doc_id (str): 文档 ID / Document ID
         doc_type (str): 文档类型 / Document type
         text (str): 切片文本内容 / Chunk text content
-        score (float): 相似度得分，范围 [0, 1]，越高越相关 / Similarity score in [0, 1], higher is more relevant
+        score (float): 相似度得分，范围 [0, 1]，越高越相关。
+                       由向量库返回的 L2 距离经 1/(1+distance) 归一化得到
+                       / Similarity score in [0, 1], higher is more relevant.
+                       Normalized from the L2 distance returned by the vector store via 1/(1+distance)
         metadata (dict): 切片元数据，用于溯源展示 / Chunk metadata for source tracing display
 
     Example:

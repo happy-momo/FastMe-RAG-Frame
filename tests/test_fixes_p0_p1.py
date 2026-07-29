@@ -408,3 +408,142 @@ class TestP19PromptTemplateQuote:
         assert (info_close_period + curly_close + period) in system or \
                (info_close_period + straight_close + period) in system, \
             "default 模板引号未闭合或缺少句号"
+
+
+# =============================================================================
+# P0-10: score 语义归一化（L2 距离 -> [0,1] 相似度）
+# =============================================================================
+
+class TestP010ScoreSemanticNormalization:
+    """P0-10: 检索结果 score 应为 [0,1] 相似度（越大越相关），而非原始 L2 距离
+
+    修复前：FAISS/Chroma 返回的 L2 距离被原样塞入 score，方向相反且可能 > 1，
+    与 FastMeSearchResult.score 文档声明的 "[0,1]，越高越相关" 矛盾。
+    """
+
+    def _make_converter(self):
+        from core.retriever import BaseRetriever, ResultConverterMixin
+
+        class _Conv(BaseRetriever, ResultConverterMixin):
+            def retrieve(self, query, top_k, filters=None):
+                return []
+
+            def supports_filter(self):
+                return True
+
+        return _Conv()
+
+    def test_distance_zero_is_perfect_match(self):
+        conv = self._make_converter()
+        assert conv._distance_to_similarity(0.0) == 1.0
+
+    def test_larger_distance_means_lower_score(self):
+        conv = self._make_converter()
+        s1 = conv._distance_to_similarity(0.5)
+        s2 = conv._distance_to_similarity(2.0)
+        s3 = conv._distance_to_similarity(10.0)
+        assert 0 < s3 < s2 < s1 < 1.0, \
+            "距离越大相似度应越低（单调递减）"
+
+    def test_score_always_in_unit_range(self):
+        conv = self._make_converter()
+        for d in [0.0, 0.1, 1.0, 4.0, 100.0, 10000.0]:
+            s = conv._distance_to_similarity(d)
+            assert 0.0 < s <= 1.0, f"距离 {d} 的相似度 {s} 超出 [0,1]"
+
+    def test_none_and_invalid_distance_returns_zero(self):
+        conv = self._make_converter()
+        assert conv._distance_to_similarity(None) == 0.0
+        assert conv._distance_to_similarity("abc") == 0.0
+        # 负距离 clamp 到 0 -> 1/(1+0) = 1.0（防御性，正常不会出现负距离）
+        assert conv._distance_to_similarity(-1.0) == 1.0
+
+    def test_to_fastme_results_normalizes_score(self):
+        from langchain_core.documents import Document
+        conv = self._make_converter()
+        # FAISS/Chroma 返回 (Document, L2距离)，距离越小越相关
+        docs = [
+            (Document(page_content="a", metadata={"chunk_id": "c1"}), 0.3),   # 更相关
+            (Document(page_content="b", metadata={"chunk_id": "c2"}), 1.5),   # 较不相关
+        ]
+        results = conv._to_fastme_results(docs)
+        assert results[0].score > results[1].score, \
+            "距离小的应得到更高的相似度分数"
+        assert all(0.0 < r.score <= 1.0 for r in results), \
+            "归一化后 score 必须落在 [0,1]"
+
+    def test_real_faiss_retrieval_scores_in_unit_range(self, embeddings, faiss_test_dir):
+        """端到端：FAISS 真实检索的 score 落在 [0,1] 且按相关度降序"""
+        from vector_stores.faiss import FAISSAdapter
+        from vector_stores.faiss_retriever import FAISSRetriever
+        from langchain_core.documents import Document
+
+        adapter = FAISSAdapter(embedding_function=embeddings, index_path=faiss_test_dir)
+        retriever = FAISSRetriever(adapter)
+        adapter.add_documents(
+            [
+                Document(page_content="设备报警处理方法", metadata={"doc_type": "log"}),
+                Document(page_content="设备维护手册内容", metadata={"doc_type": "manual"}),
+            ],
+            ids=["d1", "d2"],
+        )
+        results = retriever.retrieve(query="设备报警", top_k=2)
+        assert len(results) == 2
+        scores = [r.score for r in results]
+        assert all(0.0 < s <= 1.0 for s in scores), \
+            f"真实检索 score 超出 [0,1]: {scores}"
+        # 最相关的（距离最小）应排在最前，分数最高
+        assert scores == sorted(scores, reverse=True), \
+            f"score 未按相关度降序排列: {scores}"
+
+
+# =============================================================================
+# P0-11: LLM max_tokens / streaming / max_retries 配置透传
+# =============================================================================
+
+class TestP011LlmConfigPassthrough:
+    """P0-11: _create_llm 应将 max_tokens / streaming / max_retries 透传给 ChatOpenAI
+
+    修复前：ChatOpenAI 只接收 model_name/api_key/base_url/temperature，
+    配置中的 max_tokens、streaming 被静默丢弃。
+    """
+
+    def _make_rag(self, llm_cfg):
+        from app_factory import FastMeRAG
+        rag = FastMeRAG.__new__(FastMeRAG)  # 跳过 __init__
+        rag.config = {"llm": llm_cfg}
+        return rag
+
+    def test_max_tokens_streaming_max_retries_passed(self):
+        rag = self._make_rag({
+            "model_name": "qwen-plus",
+            "max_tokens": 1024,
+            "streaming": True,
+            "max_retries": 5,
+        })
+        with patch("langchain_openai.ChatOpenAI") as mock_llm:
+            mock_llm.return_value = MagicMock()
+            rag._create_llm()
+
+        _, kwargs = mock_llm.call_args
+        assert kwargs["max_tokens"] == 1024, "max_tokens 未透传"
+        assert kwargs["streaming"] is True, "streaming 未透传"
+        assert kwargs["max_retries"] == 5, "max_retries 未透传"
+
+    def test_defaults_when_not_configured(self):
+        """未配置时应使用安全默认值"""
+        rag = self._make_rag({"model_name": "qwen-plus"})
+        with patch("langchain_openai.ChatOpenAI") as mock_llm:
+            mock_llm.return_value = MagicMock()
+            rag._create_llm()
+
+        _, kwargs = mock_llm.call_args
+        assert kwargs["max_tokens"] is None
+        assert kwargs["streaming"] is False
+        assert kwargs["max_retries"] == 2
+
+    def test_default_config_carries_max_retries(self):
+        """DEFAULT_CONFIG 应包含 max_retries，保证默认配置下也透传"""
+        from app_factory import FastMeRAG
+        assert "max_retries" in FastMeRAG.DEFAULT_CONFIG["llm"], \
+            "DEFAULT_CONFIG.llm 缺少 max_retries 字段"
