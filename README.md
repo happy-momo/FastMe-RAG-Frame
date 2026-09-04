@@ -6,6 +6,8 @@
 
 **FastMe RAG** 是一个面向制造业的轻量化、可插拔 RAG（检索增强生成）框架。专为工厂设备手册、运维日志、车间工单、工艺 SOP 等制造业文档设计，提供场景化问答和工业元数据自动抽取能力。
 
+> 🚀 **Chatbot 演示模板**：本分支（`chatbot-demo`）提供开箱即用的 RAG Chatbot 服务（Vue + FastAPI + Docker 一键栈），用于演示框架能力。使用方法见 [CHATBOT_DEMO.md](CHATBOT_DEMO.md)。
+
 > 📖 [English README](README_EN.md) | 📖 [配置使用指南](examples/README.md) | 📖 [详细文档](docs/README.md)
 
 ---

@@ -1,0 +1,8 @@
+# FastMe RAG Chatbot Demo - Backend 服务依赖
+# 仅包含服务层依赖；框架依赖由仓库根 requirements.txt 安装
+# Demo service deps; framework deps are installed from repo-root requirements.txt
+
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+httpx>=0.27

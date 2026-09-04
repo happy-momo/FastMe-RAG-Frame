@@ -1,0 +1,1 @@
+"""API 数据契约 / API data contracts (Pydantic schemas)."""

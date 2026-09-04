@@ -1,0 +1,30 @@
+# Backend docker build context = repo root. Exclude heavy / runtime-generated dirs.
+
+.git
+.gitignore
+README*.md
+docs
+examples
+.claude
+.vscode
+
+# frontend built & served separately
+frontend
+
+# runtime generated (mounted as volumes)
+data
+models
+files
+hf_cache
+
+# python
+__pycache__
+*.pyc
+.pytest_cache
+venv
+.venv
+env
+
+# secrets
+.env
+.env.*.local
