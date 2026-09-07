@@ -16,6 +16,11 @@ This repository includes a **ready-to-use RAG Chatbot service template** on the 
 
 ### ✨ Demo Features
 
+<img width="1907" height="861" alt="image" src="https://github.com/user-attachments/assets/a91dd8a3-1fdf-42cf-8f84-879a270becbe" />
+
+<img width="1891" height="880" alt="image" src="https://github.com/user-attachments/assets/c91f498c-146f-4dd1-bd84-9b4121f689c6" />
+
+
 | Feature | Description |
 |---------|-------------|
 | 💬 **Streaming Chat** | SSE streaming output with typewriter effect |
