@@ -10,6 +10,59 @@
 
 ---
 
+## 🚀 Chatbot 演示模板（`chatbot-demo` 分支）
+
+本仓库提供一个**开箱即用的 RAG Chatbot 服务模板**，位于 `chatbot-demo` 分支。基于 FastMe RAG 框架，使用 **Vue 3 + FastAPI + Docker Compose** 构建，完整演示框架的核心能力，可直接用于验证和二次开发。
+
+This repository includes a **ready-to-use RAG Chatbot service template** on the `chatbot-demo` branch. Built on FastMe RAG framework with **Vue 3 + FastAPI + Docker Compose**, it fully demonstrates the framework's core capabilities.
+
+### ✨ Demo 功能 / Demo Features
+
+| 功能 | 说明 |
+|------|------|
+| 💬 **流式对话** | SSE 流式输出，打字机效果 / Streaming chat with typewriter effect |
+| 🎯 **4 种场景** | 故障诊断 / 手册查询 / 工单追溯 / 默认问答 / 4 scenarios: fault diagnosis / manual query / work order trace / default Q&A |
+| 🔍 **溯源展示** | 相似度进度条、彩色标签、元数据详情 / Source tracing with similarity bars, colored tags, metadata details |
+| 📄 **文档入库** | 拖拽上传、类型选择、4 步入库流程可视化 / Document ingestion with drag-drop, type selection, 4-step flow |
+| 💾 **多会话记忆** | 多会话独立历史 / Multi-session independent history |
+| 📊 **LLM 状态监控** | 实时连接状态指示 / Real-time connection status indicator |
+| 🎨 **现代化 UI** | 渐变配色、卡片设计、流畅动画 / Modern UI with gradients, cards, smooth animations |
+
+### 🚀 快速开始 / Quick Start
+
+```bash
+# 1. 克隆仓库 / Clone the repository
+git clone https://github.com/happy-momo/FastMe-RAG-Frame.git
+cd FastMe-RAG-Frame
+
+# 2. 切换到 chatbot-demo 分支 / Switch to chatbot-demo branch
+git checkout chatbot-demo
+
+# 3. 配置 LLM / Configure LLM
+cp .env.example .env
+# 编辑 .env，设置你的 OpenAI 兼容 LLM 端点 / Edit .env with your OpenAI-compatible LLM endpoint
+
+# 4. 一键启动 / One-click start
+docker compose up -d
+
+# 5. 访问 / Access
+# 前端 Frontend:    http://localhost:8080
+# 后端 API Backend: http://localhost:8000
+# API 文档 Docs:    http://localhost:8000/docs
+```
+
+> **💡 本地开发 / Local Development**：详见 `chatbot-demo` 分支的文档。
+>
+> See docs on the `chatbot-demo` branch for detailed local development instructions.
+
+### 🏗️ 与框架的关系 / Relationship with the Framework
+
+Demo **完全不修改框架源码**，通过 `RAGManager` 单例以线程锁串行调用 FastMe RAG 框架，将其包装为 HTTP 服务。
+
+The demo **does not modify framework source code at all**. It wraps FastMe RAG as an HTTP service through a `RAGManager` singleton with thread-lock serialization.
+
+---
+
 ## 目录
 
 - [核心特性](#-核心特性)

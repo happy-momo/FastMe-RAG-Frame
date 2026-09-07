@@ -10,6 +10,53 @@
 
 ---
 
+## 🚀 Chatbot Demo Template (`chatbot-demo` branch)
+
+This repository includes a **ready-to-use RAG Chatbot service template** on the `chatbot-demo` branch. Built on FastMe RAG framework with **Vue 3 + FastAPI + Docker Compose**, it fully demonstrates the framework's core capabilities and is ready for validation and secondary development.
+
+### ✨ Demo Features
+
+| Feature | Description |
+|---------|-------------|
+| 💬 **Streaming Chat** | SSE streaming output with typewriter effect |
+| 🎯 **4 Scenarios** | Fault diagnosis / manual query / work order trace / default Q&A |
+| 🔍 **Source Tracing** | Similarity progress bars, colored tags, metadata details |
+| 📄 **Document Ingestion** | Drag & drop upload, type selection, 4-step flow visualization |
+| 💾 **Multi-Session Memory** | Independent history for multiple sessions |
+| 📊 **LLM Status Monitor** | Real-time connection status indicator |
+| 🎨 **Modern UI** | Gradient color scheme, card design, smooth animations |
+
+### 🚀 Quick Start
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/happy-momo/FastMe-RAG-Frame.git
+cd FastMe-RAG-Frame
+
+# 2. Switch to chatbot-demo branch
+git checkout chatbot-demo
+
+# 3. Configure LLM
+cp .env.example .env
+# Edit .env with your OpenAI-compatible LLM endpoint
+
+# 4. One-click start
+docker compose up -d
+
+# 5. Access
+# Frontend:  http://localhost:8080
+# Backend:   http://localhost:8000
+# API Docs:  http://localhost:8000/docs
+```
+
+> **💡 Local Development**: See docs on the `chatbot-demo` branch for detailed instructions.
+
+### 🏗️ Relationship with the Framework
+
+The demo **does not modify framework source code at all**. It wraps FastMe RAG as an HTTP service through a `RAGManager` singleton with thread-lock serialization.
+
+---
+
 ## Table of Contents
 
 - [Core Features](#-core-features)
