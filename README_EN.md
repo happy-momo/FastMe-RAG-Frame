@@ -10,6 +10,67 @@
 
 ---
 
+## 🚀 Chatbot Demo Template (`chatbot-demo` branch)
+
+> The `chatbot-demo` branch provides a ready-to-use RAG Chatbot service with **Vue 3 frontend + FastAPI backend + Docker Compose one-click deployment**, fully demonstrating the core capabilities of the FastMe RAG framework.
+
+### ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| 💬 **Streaming Chat** | SSE streaming output with typewriter effect, real-time response visibility |
+| 🎯 **4 Scenarios** | Fault Diagnosis / Manual Query / Work Order Trace / Default Q&A, scenario-based retrieval & prompts |
+| 🔍 **Source Tracing** | Similarity progress bars, colored tags, metadata details — answer sources at a glance |
+| 📄 **Document Ingestion** | Drag & drop upload, type selection, real-time progress, 4-step ingestion flow visualization |
+| 💾 **Multi-Session Memory** | Create multiple independent sessions, each preserving its chat history |
+| 📊 **LLM Status Monitor** | Real-time LLM connection status display in the header (pulse indicator + Tooltip) |
+| 🎨 **Modern UI** | Gradient color scheme, card design, smooth animations, responsive layout |
+
+### 🚀 Quick Start
+
+#### Option 1: Docker Compose (Recommended)
+
+```bash
+# 1. Clone and switch to the demo branch
+git clone https://github.com/your-org/FastMe-RAG-Frame.git
+cd FastMe-RAG-Frame
+git checkout chatbot-demo
+
+# 2. Configure environment variables
+cp .env.example .env
+# Edit .env with your LLM endpoint
+
+# 3. One-click start
+docker compose up -d
+
+# 4. Access
+# Frontend: http://localhost:8080
+# Backend API: http://localhost:8000
+# API Docs: http://localhost:8000/docs
+```
+
+#### Option 2: Local Development
+
+```bash
+# Backend
+pip install -r requirements.txt -r backend/requirements.txt
+PYTHONPATH="$PWD:$PWD/backend" uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Frontend
+cd frontend
+npm install
+npm run dev
+# Visit http://localhost:5173
+```
+
+### 🏗️ Architecture
+
+The demo **does not modify framework source code at all**. It wraps FastMe RAG as an HTTP service through a `RAGManager` singleton with thread-lock serialization. Streaming answers are orchestrated at the application layer by reusing framework components (retriever / prompt / llm / memory) to combine streaming output with conversation memory.
+
+See [CHATBOT_DEMO.md](CHATBOT_DEMO.md) for details.
+
+---
+
 ## Table of Contents
 
 - [Core Features](#-core-features)

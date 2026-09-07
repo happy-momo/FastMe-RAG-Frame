@@ -6,9 +6,72 @@
 
 **FastMe RAG** 是一个面向制造业的轻量化、可插拔 RAG（检索增强生成）框架。专为工厂设备手册、运维日志、车间工单、工艺 SOP 等制造业文档设计，提供场景化问答和工业元数据自动抽取能力。
 
-> 🚀 **Chatbot 演示模板**：本分支（`chatbot-demo`）提供开箱即用的 RAG Chatbot 服务（Vue + FastAPI + Docker 一键栈），用于演示框架能力。使用方法见 [CHATBOT_DEMO.md](CHATBOT_DEMO.md)。
-
 > 📖 [English README](README_EN.md) | 📖 [配置使用指南](examples/README.md) | 📖 [详细文档](docs/README.md)
+
+---
+
+## 🚀 Chatbot 演示模板（`chatbot-demo` 分支）
+
+> 本分支（`chatbot-demo`）提供开箱即用的 RAG Chatbot 服务，包含 **Vue 3 前端 + FastAPI 后端 + Docker Compose 一键部署**，完整演示 FastMe RAG 框架的核心能力。
+>
+> This branch (`chatbot-demo`) provides a ready-to-use RAG Chatbot service with **Vue 3 frontend + FastAPI backend + Docker Compose one-click deployment**, fully demonstrating the core capabilities of the FastMe RAG framework.
+
+### ✨ 功能特性 / Features
+
+| 功能 | 说明 |
+|------|------|
+| 💬 **智能流式对话** | SSE 流式输出，打字机效果，响应实时可见 |
+| 🎯 **4 种场景切换** | 故障诊断 / 手册查询 / 工单追溯 / 默认问答，场景化检索与 Prompt |
+| 🔍 **回答溯源展示** | 相似度进度条、彩色标签、元数据详情，答案来源一目了然 |
+| 📄 **文档入库管理** | 拖拽上传、类型选择、实时进度、4 步入库流程可视化 |
+| 💾 **多会话记忆** | 支持创建多个独立会话，各自保留对话历史 |
+| 📊 **LLM 状态监控** | 顶部实时显示大模型连接状态（脉冲呼吸灯 + Tooltip）|
+| 🎨 **现代化 UI** | 渐变配色、卡片设计、流畅动画、响应式布局 |
+
+### 🚀 快速启动 / Quick Start
+
+#### 方式一：Docker Compose（推荐）/ Option 1: Docker Compose (Recommended)
+
+```bash
+# 1. 克隆并切换到 demo 分支 / Clone and switch to demo branch
+git clone https://github.com/your-org/FastMe-RAG-Frame.git
+cd FastMe-RAG-Frame
+git checkout chatbot-demo
+
+# 2. 配置环境变量 / Configure environment variables
+cp .env.example .env
+# 编辑 .env，配置你的 LLM 端点 / Edit .env with your LLM endpoint
+
+# 3. 一键启动 / One-click start
+docker compose up -d
+
+# 4. 访问 / Access
+# 前端: http://localhost:8080
+# 后端 API: http://localhost:8000
+# API 文档: http://localhost:8000/docs
+```
+
+#### 方式二：本地开发运行 / Option 2: Local Development
+
+```bash
+# 后端 / Backend
+pip install -r requirements.txt -r backend/requirements.txt
+PYTHONPATH="$PWD:$PWD/backend" uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# 前端 / Frontend
+cd frontend
+npm install
+npm run dev
+# 访问 http://localhost:5173
+```
+
+### 🏗️ 架构设计 / Architecture
+
+Demo **完全不修改框架源码**，通过 `RAGManager` 单例以线程锁串行调用 FastMe RAG 框架，将其包装为 HTTP 服务。流式问答在应用层编排框架组件（retriever / prompt / llm / memory），实现流式输出与会话记忆的结合。
+
+The demo **does not modify framework source code at all**. It wraps FastMe RAG as an HTTP service through a `RAGManager` singleton with thread-lock serialization. Streaming answers are orchestrated at the application layer by reusing framework components (retriever / prompt / llm / memory) to combine streaming output with conversation memory.
+
+详细说明请见 [CHATBOT_DEMO.md](CHATBOT_DEMO.md)。
 
 ---
 
