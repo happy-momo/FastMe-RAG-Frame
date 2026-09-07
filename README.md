@@ -18,6 +18,11 @@ This repository includes a **ready-to-use RAG Chatbot service template** on the 
 
 ### ✨ Demo 功能 / Demo Features
 
+<img width="1907" height="861" alt="image" src="https://github.com/user-attachments/assets/47d53a28-869e-49fb-a69a-2781b6bd6c9f" />
+
+<img width="1891" height="880" alt="image" src="https://github.com/user-attachments/assets/f4c1e929-820f-4148-bae5-8567164e91b2" />
+
+
 | 功能 | 说明 |
 |------|------|
 | 💬 **流式对话** | SSE 流式输出，打字机效果 / Streaming chat with typewriter effect |
