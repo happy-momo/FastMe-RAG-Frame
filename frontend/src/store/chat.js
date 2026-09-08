@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { createSession, deleteSession, fetchScenes, fetchSessions } from '../api/ingest'
+import { createSession, deleteSession, fetchScenes, fetchSessions, fetchSessionMessages } from '../api/ingest'
 
 const genId = () => `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
 
@@ -27,7 +27,10 @@ export const useChatStore = defineStore('chat', {
     },
 
     async loadSessions() {
-      this.sessions = await fetchSessions()
+      // 后端返回 { sessions: [...] }，取数组部分
+      // Backend returns { sessions: [...] }, extract the array
+      const res = await fetchSessions()
+      this.sessions = res?.sessions ?? res ?? []
     },
 
     async ensureCurrentSession() {
@@ -47,6 +50,31 @@ export const useChatStore = defineStore('chat', {
     switchSession(id) {
       this.currentSession = id
       if (!this.messages[id]) this.messages[id] = []
+    },
+
+    async loadSessionHistory(sessionId) {
+      // 从后端拉取会话历史消息并转为前端消息结构
+      // Fetch session history from backend and convert to frontend message structure
+      try {
+        const res = await fetchSessionMessages(sessionId)
+        const list = res?.messages ?? []
+        const history = list
+          .filter((m) => m && m.content)
+          .map((m, i) => ({
+            id: `hist_${sessionId}_${i}`,
+            role: m.role === 'user' ? 'user' : 'assistant',
+            content: m.content,
+            sources: [],
+            streaming: false,
+          }))
+        this.messages[sessionId] = history
+        return history
+      } catch (e) {
+        // 拉取失败时保留本地状态，静默降级
+        // On failure keep local state, degrade silently
+        if (!this.messages[sessionId]) this.messages[sessionId] = []
+        return this.messages[sessionId]
+      }
     },
 
     async removeSession(id) {

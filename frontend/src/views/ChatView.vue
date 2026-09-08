@@ -209,17 +209,22 @@ function scrollBottom() {
 
 async function handleSessionCommand(cmd) {
   if (cmd === 'new') {
+    // 新建会话：addSession 内部已设置 currentSession，无需再 switch
+    // Create new session: addSession already sets currentSession, no need to switch again
     await store.addSession()
-  } else if (!store.messages[cmd]) {
-    await store.loadSessions()
+  } else {
+    // 切换到已有会话：先设置 currentSession，再从后端加载历史消息
+    // Switch to existing session: set currentSession first, then load history from backend
+    store.switchSession(cmd)
+    await store.loadSessionHistory(cmd)
   }
-  store.switchSession(cmd)
   nextTick(scrollBottom)
 }
 
 async function addNewSession() {
   await store.addSession()
   ElMessage.success('已创建新会话')
+  nextTick(scrollBottom)
 }
 
 async function clearAllMessage() {
@@ -366,6 +371,8 @@ watch(scene, () => {
   border-radius: var(--fm-radius-md);
   box-shadow: var(--fm-shadow-xl);
   min-width: 240px;
+  max-height: 320px;      /* 限制下拉最大高度 / limit dropdown max height */
+  overflow-y: auto;       /* 超出滚动 / scroll when overflow */
 }
 
 .session-menu__header {

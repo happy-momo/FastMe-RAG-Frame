@@ -19,3 +19,15 @@ class SessionCreate(BaseModel):
 
 class SessionList(BaseModel):
     sessions: List[SessionInfo] = Field(default_factory=list)
+
+
+class SessionMessage(BaseModel):
+    """单条历史消息 / Single historical message."""
+    role: str  # "user" | "assistant"
+    content: str
+
+
+class SessionMessageList(BaseModel):
+    """会话历史消息列表 / Session message history."""
+    session_id: str
+    messages: List[SessionMessage] = Field(default_factory=list)

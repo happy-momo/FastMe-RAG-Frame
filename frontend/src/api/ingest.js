@@ -15,6 +15,9 @@ export function createSession(id) {
 export function deleteSession(id) {
   return http.delete(`/api/sessions/${encodeURIComponent(id)}`)
 }
+export function fetchSessionMessages(sessionId) {
+  return http.get(`/api/sessions/${encodeURIComponent(sessionId)}/messages`)
+}
 
 // Ingest (multipart upload)
 export function uploadDocument(file, docType, extraMetadata) {
