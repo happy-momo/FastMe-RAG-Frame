@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://img.shields.io/github/actions/workflow/status/happy-momo/FastMe-RAG-Frame/ci.yml?branch=frame-0.2)](https://github.com/happy-momo/FastMe-RAG-Frame/actions)
 
-**FastMe RAG** 是一个面向制造业的轻量化、可插拔检索增强生成（RAG）框架，专为工厂设备手册、运维日志、车间工单、工艺 SOP 等制造业文档设计，提供场景化问答与工业元数据自动抽取能力。
+**FastMe RAG** 是一个面向制造业的轻量化、可插拔检索增强生成（RAG）框架，专为工厂设备手册、运维日志、车间工单、工艺 SOP 等制造业文档设计，提供场景化问答、工业元数据自动抽取与多向量库接入能力。
 
 > 📖 [English README](README_EN.md)｜📖 [详细文档](docs/README.md)｜📖 [示例说明](examples/README.md)
 
@@ -20,6 +20,29 @@
 - ⚙️ **配置化驱动**：场景、Prompt 模板、字段标签均通过 YAML 配置，无需修改代码即可扩展。
 - 🌐 **多语言支持**：内置中英文，字段标签可配置。
 - 💬 **流式输出**：支持流式问答，首字更快，交互体验更佳。
+
+---
+
+## 🚀 Chatbot 演示（`chatbot-demo` 分支）
+
+本仓库同时提供一个**开箱即用的 RAG Chatbot 服务模板**，位于 `chatbot-demo` 分支。它基于 FastMe RAG 框架，使用 **Vue 3 + FastAPI + Docker Compose** 构建，完整演示框架核心能力，可直接用于验证和二次开发。
+
+| 功能 | 说明 |
+|------|------|
+| 💬 流式对话 | SSE 打字机效果，首字即出 |
+| 📄 文档上传 | 拖拽上传 PDF/DOCX/TXT/LOG/MD，选择类型后入库 |
+| 🧵 多会话记忆 | 新建 / 切换 / 删除会话，基于框架 `session_id` 记忆 |
+| 🎯 场景选择 | fault_diagnosis / manual_query / work_order_trace / default |
+| 🔍 溯源展示 | 回答附来源片段与相似度分数 |
+
+```bash
+git checkout chatbot-demo          # 切换到 demo 分支
+cp backend/.env.example .env       # 配置你的 LLM 端点
+docker compose up --build          # 一键启动
+# 前端 http://localhost:8080 | 后端 API 文档 http://localhost:8000/docs
+```
+
+Demo **零改动框架源码**：`backend/app/core/rag.py` 通过 `RAGManager` 单例以线程锁串行调用 `FastMeRAG`，将其包装为 HTTP 服务。
 
 ---
 
@@ -99,53 +122,54 @@ FASTME_VECTOR_STORE_TYPE=chroma
 from app_factory import FastMeRAG
 
 rag = FastMeRAG()  # 自动读取 .env 配置
-
-# 文档入库
-rag.ingest("设备手册.pdf", doc_type="manual")
-
-# 场景化问答
+rag.ingest("设备手册.pdf", doc_type="manual")      # 入库
 result = rag.chat("设备报警怎么处理？", scene="fault_diagnosis")
 print(result["answer"])
 ```
 
 ---
 
-## 📖 核心 API
+## 📖 框架使用详解
 
-### `ingest()` — 单文档入库
+### 文档入库 `ingest()`
 
 ```python
 result = rag.ingest(
-    file_path: str,              # 文件路径（必填），支持 PDF/DOCX/TXT/LOG/MD
-    doc_type: str,               # 文档类型（必填）：log/manual/business/sop
-    extra_metadata: dict = None, # 额外元数据，注入到所有切片
-    require_review: bool = False # True 时预览切片，不实际入库
+    file_path: str,              # 必填；支持 PDF/DOCX/TXT/LOG/MD
+    doc_type: str,               # 必填；log/manual/business/sop
+    extra_metadata: dict = None, # 注入到所有切片的附加元数据
+    require_review: bool = False # True 时仅预览切片，不实际入库
 )
+# result = {"status": "success", "doc_id": ..., "chunks_count": N}
 ```
 
-### `batch_ingest()` — 批量入库
+批量入库一个文件夹：
 
 ```python
 results = rag.batch_ingest(
-    folder_path: str,            # 文件夹路径（必填）
-    doc_type: str,               # 文档类型（必填）
-    file_extensions: list = None # 扩展名过滤
+    folder_path="./logs",
+    doc_type="log",
+    extra_metadata={"project": "生产线A"},     # 所有文件共享元数据
+    file_extensions=[".log"]                   # 扩展名过滤
 )
+# [{"status": "success", ...}, {"status": "error", "file": "...", "error": "..."}]
 ```
 
-### `chat()` — 场景化问答
+### 场景化问答 `chat()`
 
 ```python
 result = rag.chat(
-    question: str,                # 用户问题（必填）
-    scene: str = "default",       # 场景：fault_diagnosis / manual_query / work_order_trace / default
-    filters: dict = None,         # 过滤条件，如 {"device_id": "EQ001"}
-    top_k: int = None             # 召回数量，默认取场景配置
+    question="E001 设备有什么故障？",
+    scene="fault_diagnosis",
+    filters={"device_id": "EQ001"},   # 过滤条件，只检索该设备
+    top_k=5                           # 召回数量，默认取场景配置
 )
-# result = {"answer": str, "sources": [...], "scene": str}
+# result = {"answer": str, "sources": [{"score": 0.95, "preview": "...", ...}], "scene": str}
 ```
 
-### `chat_stream()` — 流式问答
+`filters` 支持单条件与多条件（AND 关系）；FAISS 通过「召回 + 后过滤」实现同等过滤，需先召回 `top_k × post_filter_multiplier` 个结果再过滤。
+
+### 流式问答 `chat_stream()`
 
 ```python
 for chunk in rag.chat_stream("设备报警怎么处理？", scene="fault_diagnosis"):
@@ -155,10 +179,10 @@ for chunk in rag.chat_stream("设备报警怎么处理？", scene="fault_diagnos
 ### 对话记忆
 
 ```python
-rag.create_memory("user_001", max_turns=10)
-result = rag.chat_with_memory("E001 设备有什么故障？", session_id="user_001", scene="fault_diagnosis")
-memory = rag.get_memory("user_001")
-rag.clear_memory("user_001")
+rag.create_memory("user_001", max_turns=10)          # 创建会话记忆
+result = rag.chat_with_memory("E001 有什么故障？", session_id="user_001", scene="fault_diagnosis")
+memory = rag.get_memory("user_001")                  # 查看历史
+rag.clear_memory("user_001")                         # 清除指定会话
 ```
 
 ### 配置加载
@@ -167,12 +191,14 @@ rag.clear_memory("user_001")
 # 从 YAML 配置文件加载
 rag = FastMeRAG.from_config("./config/fastme_chroma.yaml")
 
-# 从配置字典加载，并覆盖部分值
+# 从配置字典加载，或覆盖部分值
 rag = FastMeRAG.from_config(
     "./config/fastme_chroma.yaml",
     overrides={"vector_store": {"config": {"collection_name": "new_coll"}}}
 )
 ```
+
+配置优先级：**配置文件 > 环境变量 > 代码默认值**。
 
 ---
 
@@ -196,7 +222,109 @@ rag = FastMeRAG.from_config(
 | 工单追溯 | `"work_order_trace"` | 工单、生产记录追溯 | business |
 | 默认问答 | `"default"` | 通用问答 | 全部 |
 
-场景通过 `config/scenes.yaml` 配置，支持单文档类型与多文档类型。
+场景通过 `config/scenes.yaml` 配置，支持单文档类型与多文档类型（`doc_type` 列表自动转换为 `$in` 操作符）。
+
+---
+
+## 🚢 部署方法
+
+### 方式一：作为 Python 库集成（推荐）
+
+在自有服务中安装并调用：
+
+```python
+# 你的服务代码中
+from app_factory import FastMeRAG
+
+app_state = {"rag": None}
+
+def get_rag():
+    if app_state["rag"] is None:
+        app_state["rag"] = FastMeRAG(config={...})   # 或用 .env / YAML
+    return app_state["rag"]
+```
+
+适合作为 FastAPI / Flask / Django 服务的 RAG 引擎直接集成。
+
+### 方式二：Docker 一键部署 Chatbot（`chatbot-demo` 分支）
+
+```bash
+git checkout chatbot-demo
+cp backend/.env.example .env        # 配置 LLM 端点与 Embedding 策略
+docker compose up --build           # 一键启动前后端
+# 前端 http://localhost:8080 | 后端 http://localhost:8000/docs
+```
+
+| 配置项 | 说明 |
+|--------|------|
+| `FASTME_LLM_BASE_URL` | OpenAI 兼容端点；容器内访问宿主机用 `host.docker.internal` |
+| `FASTME_LLM_API_KEY` | 必须非空；无鉴权服务填 `not-needed` |
+| `FASTME_LLM_MODEL` | 模型名，如 `qwen-plus` / `llama3.2` |
+| `EMBEDDING_MODEL` | `BAAI/bge-m3`（自动下载）或本地模型路径 `/app/models/bge-m3` |
+
+> 换 Embedding 模型后需 `docker compose down -v` 清空数据卷再重建。
+
+---
+
+## 🔧 二次开发
+
+### 添加新场景（动态 API）
+
+无需改框架代码，运行时动态添加：
+
+```python
+rag.add_scene(
+    name="custom_scene",
+    doc_type="log",
+    prompt_template="fault_diagnosis",   # 复用已有 Prompt 模板
+    top_k=10,
+    description="自定义场景"
+)
+# 之后即可使用
+result = rag.chat("...", scene="custom_scene")
+```
+
+### 添加新场景（YAML 配置）
+
+在 `config/scenes.yaml` 中追加：
+
+```yaml
+scenes:
+  comprehensive_search:
+    doc_type:            # 多文档类型：匹配多个知识库
+      - log
+      - manual
+    prompt_template: comprehensive
+    top_k: 10
+    description: "综合查询 - 日志+手册"
+```
+
+### 添加自定义元数据抽取规则
+
+```python
+rag.add_metadata_rule(
+    field="device_model",
+    patterns=[r"型号[：:\s]*([A-Z0-9\-]+)"],
+    description="设备型号抽取"
+)
+```
+
+### 添加自定义 Splitter
+
+新的拆解器继承 `BaseSplitter` 并注册：
+
+```python
+from splitters.base import BaseSplitter, SplitterRegistry
+
+class MySplitter(BaseSplitter):
+    def __init__(self, max_chunk_size: int = 1000):
+        super().__init__(max_chunk_size)
+    def split(self, document):
+        # 实现你的拆分逻辑，返回 chunk 列表
+        return [...]
+```
+
+> 详细二次开发指南见 [DEVELOPER_GUIDE_CN.md](docs/DEVELOPER_GUIDE_CN.md)。
 
 ---
 
@@ -222,7 +350,8 @@ FastMe-RAG-Frame/
 ## 🧪 运行测试
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests/ -v                # 全部测试
+python -m pytest tests/test_splitters.py  # 指定模块
 ```
 
 ---

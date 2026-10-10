@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://img.shields.io/github/actions/workflow/status/happy-momo/FastMe-RAG-Frame/ci.yml?branch=frame-0.2)](https://github.com/happy-momo/FastMe-RAG-Frame/actions)
 
-**FastMe RAG** is a lightweight, pluggable Retrieval-Augmented Generation (RAG) framework purpose-built for manufacturing. It is designed for factory equipment manuals, operation logs, workshop work orders, and process SOPs, providing scene-aware Q&A and automatic industrial metadata extraction.
+**FastMe RAG** is a lightweight, pluggable Retrieval-Augmented Generation (RAG) framework purpose-built for manufacturing. It is designed for factory equipment manuals, operation logs, workshop work orders, and process SOPs, providing scene-aware Q&A, automatic industrial metadata extraction, and multi-vector-store support.
 
 > 📖 [中文 README](README.md) | 📖 [Documentation](docs/README.md) | 📖 [Examples](examples/README.md)
 
@@ -20,6 +20,29 @@
 - ⚙️ **Config-driven**: scenes, prompt templates, and field labels are defined in YAML — extend without touching code.
 - 🌐 **Internationalization**: built-in Chinese and English, configurable field labels.
 - 💬 **Streaming output**: streaming Q&A for faster first-token and better UX.
+
+---
+
+## 🚀 Chatbot Demo (`chatbot-demo` branch)
+
+This repository also provides a **ready-to-use RAG Chatbot service template** on the `chatbot-demo` branch. Built on the FastMe RAG framework with **Vue 3 + FastAPI + Docker Compose**, it fully demonstrates the framework's core capabilities and is ready for validation and secondary development.
+
+| Feature | Description |
+|---------|-------------|
+| 💬 Streaming chat | SSE typewriter effect, first token appears immediately |
+| 📄 Document upload | Drag-and-drop PDF/DOCX/TXT/LOG/MD, choose type and ingest |
+| 🧵 Multi-session memory | Create / switch / delete sessions based on framework `session_id` |
+| 🎯 Scene selection | fault_diagnosis / manual_query / work_order_trace / default |
+| 🔍 Source tracing | Answers with source snippets and similarity scores |
+
+```bash
+git checkout chatbot-demo          # switch to demo branch
+cp backend/.env.example .env       # configure your LLM endpoint
+docker compose up --build          # one-click start
+# Frontend http://localhost:8080 | API docs http://localhost:8000/docs
+```
+
+The demo **does not modify framework source at all**: `backend/app/core/rag.py` wraps `FastMeRAG` as an HTTP service via a `RAGManager` singleton with thread-lock serialization.
 
 ---
 
@@ -99,20 +122,16 @@ FASTME_VECTOR_STORE_TYPE=chroma
 from app_factory import FastMeRAG
 
 rag = FastMeRAG()  # reads .env automatically
-
-# Ingest a document
-rag.ingest("equipment_manual.pdf", doc_type="manual")
-
-# Scene-aware Q&A
+rag.ingest("equipment_manual.pdf", doc_type="manual")      # ingest
 result = rag.chat("How do I handle an equipment alarm?", scene="fault_diagnosis")
 print(result["answer"])
 ```
 
 ---
 
-## 📖 Core API
+## 📖 Framework Usage Guide
 
-### `ingest()` — ingest a single document
+### Ingest documents `ingest()`
 
 ```python
 result = rag.ingest(
@@ -121,31 +140,36 @@ result = rag.ingest(
     extra_metadata: dict = None, # extra metadata injected into all chunks
     require_review: bool = False # if True, preview chunks without storing
 )
+# result = {"status": "success", "doc_id": ..., "chunks_count": N}
 ```
 
-### `batch_ingest()` — ingest a folder
+Batch-ingest an entire folder:
 
 ```python
 results = rag.batch_ingest(
-    folder_path: str,            # required
-    doc_type: str,               # required
-    file_extensions: list = None # extension filter
+    folder_path="./logs",
+    doc_type="log",
+    extra_metadata={"project": "Line A"},     # shared metadata for all files
+    file_extensions=[".log"]                   # extension filter
 )
+# [{"status": "success", ...}, {"status": "error", "file": "...", "error": "..."}]
 ```
 
-### `chat()` — scene-aware Q&A
+### Scene-aware Q&A `chat()`
 
 ```python
 result = rag.chat(
-    question: str,                # required
-    scene: str = "default",       # fault_diagnosis / manual_query / work_order_trace / default
-    filters: dict = None,         # e.g. {"device_id": "EQ001"}
-    top_k: int = None             # retrieval count; defaults to scene config
+    question="What faults does device E001 have?",
+    scene="fault_diagnosis",
+    filters={"device_id": "EQ001"},   # filter conditions, retrieve only this device
+    top_k=5                           # retrieval count; defaults to scene config
 )
-# result = {"answer": str, "sources": [...], "scene": str}
+# result = {"answer": str, "sources": [{"score": 0.95, "preview": "...", ...}], "scene": str}
 ```
 
-### `chat_stream()` — streaming Q&A
+`filters` supports single and multiple conditions (AND); FAISS implements the same filtering as "retrieve + post-filter", retrieving `top_k × post_filter_multiplier` results first.
+
+### Streaming Q&A `chat_stream()`
 
 ```python
 for chunk in rag.chat_stream("How do I handle an alarm?", scene="fault_diagnosis"):
@@ -155,10 +179,10 @@ for chunk in rag.chat_stream("How do I handle an alarm?", scene="fault_diagnosis
 ### Conversation memory
 
 ```python
-rag.create_memory("user_001", max_turns=10)
-result = rag.chat_with_memory("What fault does device E001 have?", session_id="user_001", scene="fault_diagnosis")
-memory = rag.get_memory("user_001")
-rag.clear_memory("user_001")
+rag.create_memory("user_001", max_turns=10)          # create session memory
+result = rag.chat_with_memory("What fault does E001 have?", session_id="user_001", scene="fault_diagnosis")
+memory = rag.get_memory("user_001")                  # view history
+rag.clear_memory("user_001")                         # clear a session
 ```
 
 ### Configuration loading
@@ -167,12 +191,14 @@ rag.clear_memory("user_001")
 # Load from a YAML config file
 rag = FastMeRAG.from_config("./config/fastme_chroma.yaml")
 
-# Load and override some values
+# Load from config dict, or override partial values
 rag = FastMeRAG.from_config(
     "./config/fastme_chroma.yaml",
     overrides={"vector_store": {"config": {"collection_name": "new_coll"}}}
 )
 ```
+
+Configuration priority: **config file > environment variable > code default**.
 
 ---
 
@@ -181,7 +207,7 @@ rag = FastMeRAG.from_config(
 | Document type | `doc_type` | Splitter | Typical use |
 |---------------|------------|----------|-------------|
 | Operation log | `"log"` | `LogSplitter` | Equipment fault logs, system logs |
-| Equipment manual | `"manual"` | `ManualSplitter` | Operator/manual, repair manual, spec sheet |
+| Equipment manual | `"manual"` | `ManualSplitter` | Operator manual, repair manual, spec sheet |
 | Work order | `"business"` | `BusinessSplitter` | QC forms, production records, work orders |
 | Process SOP | `"sop"` | `SopSplitter` | Work instructions, BOM docs, process flow |
 
@@ -196,7 +222,109 @@ rag = FastMeRAG.from_config(
 | Work order trace | `"work_order_trace"` | Trace work orders / production records | business |
 | Default Q&A | `"default"` | General Q&A | all |
 
-Scenes are configured in `config/scenes.yaml` and support both single and multiple document types.
+Scenes are configured in `config/scenes.yaml` and support both single and multiple document types (`doc_type` lists auto-convert to the `$in` operator).
+
+---
+
+## 🚢 Deployment
+
+### Option 1: Integrate as a Python library (recommended)
+
+Install and call it from your own service:
+
+```python
+# in your service code
+from app_factory import FastMeRAG
+
+app_state = {"rag": None}
+
+def get_rag():
+    if app_state["rag"] is None:
+        app_state["rag"] = FastMeRAG(config={...})   # or .env / YAML
+    return app_state["rag"]
+```
+
+Suitable as the RAG engine behind FastAPI / Flask / Django services.
+
+### Option 2: Docker one-click Chatbot (`chatbot-demo` branch)
+
+```bash
+git checkout chatbot-demo
+cp backend/.env.example .env        # configure LLM endpoint & embedding strategy
+docker compose up --build           # one-click start
+# Frontend http://localhost:8080 | Backend http://localhost:8000/docs
+```
+
+| Config | Description |
+|--------|-------------|
+| `FASTME_LLM_BASE_URL` | OpenAI-compatible endpoint; use `host.docker.internal` to reach the host from a container |
+| `FASTME_LLM_API_KEY` | must be non-empty; fill `not-needed` for auth-free services |
+| `FASTME_LLM_MODEL` | model name, e.g. `qwen-plus` / `llama3.2` |
+| `EMBEDDING_MODEL` | `BAAI/bge-m3` (auto-download) or local path `/app/models/bge-m3` |
+
+> After changing the embedding model, run `docker compose down -v` to clear volumes and rebuild.
+
+---
+
+## 🔧 Secondary Development
+
+### Add a scene (dynamic API)
+
+No framework changes needed — add it at runtime:
+
+```python
+rag.add_scene(
+    name="custom_scene",
+    doc_type="log",
+    prompt_template="fault_diagnosis",   # reuse an existing prompt template
+    top_k=10,
+    description="custom scene"
+)
+# then use it
+result = rag.chat("...", scene="custom_scene")
+```
+
+### Add a scene (YAML config)
+
+Append to `config/scenes.yaml`:
+
+```yaml
+scenes:
+  comprehensive_search:
+    doc_type:            # multiple doc types: match multiple knowledge bases
+      - log
+      - manual
+    prompt_template: comprehensive
+    top_k: 10
+    description: "comprehensive search - logs + manuals"
+```
+
+### Add a custom metadata extraction rule
+
+```python
+rag.add_metadata_rule(
+    field="device_model",
+    patterns=[r"model[:\s]*([A-Z0-9\-]+)"],
+    description="extract device model"
+)
+```
+
+### Add a custom Splitter
+
+Extend `BaseSplitter` and register it:
+
+```python
+from splitters.base import BaseSplitter, SplitterRegistry
+
+class MySplitter(BaseSplitter):
+    def __init__(self, max_chunk_size: int = 1000):
+        super().__init__(max_chunk_size)
+    def split(self, document):
+        # implement your splitting logic, return chunk list
+        return [...]
+```
+
+> For the full guide see [DEVELOPER_GUIDE_EN.md](docs/DEVELOPER_GUIDE_EN.md).
 
 ---
 
@@ -222,7 +350,8 @@ FastMe-RAG-Frame/
 ## 🧪 Running Tests
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests/ -v                # run all tests
+python -m pytest tests/test_splitters.py  # specific module
 ```
 
 ---
