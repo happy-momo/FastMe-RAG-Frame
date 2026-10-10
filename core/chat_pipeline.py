@@ -191,12 +191,12 @@ class ChatPipeline:
                          f"chunk_id={ctx.chunk_id}, doc_type={ctx.doc_type}")
             logger.debug(f"[调试 - 上下文]   上下文 [{i}] 文本预览：{ctx.text[:150].replace(chr(10), chr(92)+'n')}...")
 
-        # 2. 格式化上下文并按 max_context_length 截断
-        context_text = self.prompt_adapter._format_context(contexts, source_fields)
-        context_text = self._truncate_context(context_text)
+        # 2. 将检索结果格式化为用户 Prompt(经 max_context_length 截断)
+        user_prompt = self.prompt_adapter.build_user_prompt(question, contexts, source_fields)
+        user_prompt = self._truncate_context(user_prompt)
 
-        # [调试] 格式化后的上下文全文
-        logger.debug(f"[调试 - 上下文] 格式化后上下文:\n{context_text}")
+        # [调试] 格式化后的用户 Prompt 全文
+        logger.debug(f"[调试 - 上下文] 格式化后用户 Prompt:\n{user_prompt}")
 
         # 3. 获取场景配置和系统 Prompt
         scene_config = self.scene_aware_retriever.scene_router.route(scene)
@@ -209,7 +209,7 @@ class ChatPipeline:
         # 4. 构建消息并调用 LLM
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content=f"用户问题：{question}\n\n检索到的上下文信息：{context_text}\n\n基于以上内容回答")
+            HumanMessage(content=user_prompt)
         ]
 
         answer = self.llm.invoke(messages).content
@@ -269,9 +269,9 @@ class ChatPipeline:
         # [调试] 流式问答上下文
         logger.debug(f"[调试 - 流式上下文] 检索到 {len(contexts)} 条上下文")
 
-        # 2. 格式化上下文并按 max_context_length 截断
-        context_text = self.prompt_adapter._format_context(contexts, source_fields)
-        context_text = self._truncate_context(context_text)
+        # 2. 将检索结果格式化为用户 Prompt(经 max_context_length 截断)
+        user_prompt = self.prompt_adapter.build_user_prompt(question, contexts, source_fields)
+        user_prompt = self._truncate_context(user_prompt)
 
         # 3. 获取场景配置和系统 Prompt
         scene_config = self.scene_aware_retriever.scene_router.route(scene)
@@ -281,7 +281,7 @@ class ChatPipeline:
         # 4. 构建消息
         messages = [
             SystemMessage(content=system_prompt),
-            HumanMessage(content=f"用户问题：{question}\n\n检索到的上下文信息：{context_text}\n\n基于以上内容回答")
+            HumanMessage(content=user_prompt)
         ]
 
         # 5. 流式调用 LLM
@@ -401,9 +401,9 @@ class ChatPipeline:
             top_k=self._resolve_top_k(top_k, scene)
         )
 
-        # 2. 格式化上下文并按 max_context_length 截断
-        context_text = self.prompt_adapter._format_context(contexts, source_fields)
-        context_text = self._truncate_context(context_text)
+        # 2. 将检索结果格式化为用户 Prompt(经 max_context_length 截断)
+        user_prompt = self.prompt_adapter.build_user_prompt(question, contexts, source_fields)
+        user_prompt = self._truncate_context(user_prompt)
 
         # 3. 获取场景配置和系统 Prompt
         scene_config = self.scene_aware_retriever.scene_router.route(scene)
@@ -421,9 +421,7 @@ class ChatPipeline:
             messages.append(msg)
 
         # 添加当前用户消息
-        messages.append(HumanMessage(
-            content=f"用户问题：{question}\n\n检索到的上下文信息：{context_text}\n\n基于以上内容回答"
-        ))
+        messages.append(HumanMessage(content=user_prompt))
 
         # 5. 调用 LLM
         answer = self.llm.invoke(messages).content
