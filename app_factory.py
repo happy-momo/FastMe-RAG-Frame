@@ -891,3 +891,7 @@ class FastMeRAG:
             self.vectorstore.delete_collection()
         except Exception:
             pass
+
+
+# 版本号 / Version (由 setuptools-scm 从 git tag 生成;无 tag 时回退 fallback_version)
+__version__ = "0.1.0"
