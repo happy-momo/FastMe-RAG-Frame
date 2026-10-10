@@ -580,5 +580,21 @@ class TestFastMeRAGBatchIngest:
         assert success_count == 2
 
 
+class TestDeleteCollectionContract:
+    """delete_collection 错误处理契约：不静默吞异常"""
+
+    def test_delete_collection_raises_on_adapter_failure(self):
+        from app_factory import FastMeRAG
+        rag = FastMeRAG.__new__(FastMeRAG)  # 跳过重量级初始化
+
+        class BoomAdapter:
+            def delete_collection(self):
+                raise RuntimeError("adapter broken")
+
+        rag.vectorstore = BoomAdapter()
+        with pytest.raises(RuntimeError, match="adapter broken"):
+            rag.delete_collection()
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

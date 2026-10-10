@@ -889,11 +889,11 @@ class FastMeRAG:
 
         Example:
             >>> rag.delete_collection()  # 删除所有向量数据 / Delete all vector data
+
+        Raises:
+            Exception: 底层向量库删除失败时向上抛出(不静默吞异常)
         """
-        try:
-            self.vectorstore.delete_collection()
-        except Exception:
-            pass
+        self.vectorstore.delete_collection()
 
 
 # 版本号 / Version (由 setuptools-scm 从 git tag 生成;无 tag 时回退 fallback_version)
