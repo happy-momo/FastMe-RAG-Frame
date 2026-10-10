@@ -22,12 +22,11 @@ Example:
 
 import logging
 import threading
-from typing import Dict, Optional, Generator, Tuple, List
+from typing import Dict, Optional, Generator
 
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_classic.memory import ConversationBufferWindowMemory
 
-from core.models import FastMeSearchResult
 from retrievers.scene_aware import SceneAwareRetriever
 
 # 框架日志配置

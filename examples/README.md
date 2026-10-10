@@ -80,7 +80,7 @@ python examples/smoke_test.py
 
 1. **安装依赖**
    ```bash
-   pip install -r requirements.txt
+   pip install -e .
    ```
 
 2. **配置环境变量**

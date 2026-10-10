@@ -59,9 +59,8 @@ source venv/bin/activate  # Linux/Mac
 # 或
 venv\Scripts\activate     # Windows
 
-# 4. 安装依赖
-pip install -r requirements.txt
-pip install -r requirements-test.txt
+# 4. 安装依赖（含开发依赖）
+pip install -e ".[dev]"
 
 # 5. 运行测试
 pytest tests/ -v

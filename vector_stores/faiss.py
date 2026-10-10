@@ -371,7 +371,6 @@ class FAISSAdapter(VectorStoreAdapter):
             使用虚拟文档初始化后删除它
             Initialize with a dummy document then remove it
         """
-        import numpy as np
 
         # 创建一个虚拟文档和它的 embedding 来初始化索引
         dummy_text = "__init_empty_index__"

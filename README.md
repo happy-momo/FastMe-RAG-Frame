@@ -115,10 +115,10 @@ The demo **does not modify framework source code at all**. It wraps FastMe RAG a
 ### 1. 安装依赖
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
-> **💡 依赖说明**：`requirements.txt` 包含框架所需的所有依赖，包括 `python-docx`（用于 DOCX 文档解析，v1.1.0+）。
+> **💡 依赖说明**：项目依赖以 `pyproject.toml` 为唯一权威源，`pip install -e .` 会安装全部运行时依赖，包括 `python-docx`（用于 DOCX 文档解析，v1.1.0+）。开发依赖（测试/静态检查）用 `pip install -e ".[dev]"`。
 
 ### 2. 配置环境变量
 
@@ -2112,8 +2112,7 @@ print(result["answer"])
 ```
 FASTME-RAG/
 ├── app_factory.py              # 主框架入口（FastMeRAG 类）
-├── app.py                      # 使用示例
-├── requirements.txt            # Python 依赖
+├── pyproject.toml              # 打包与依赖（唯一权威源）
 ├── README.md                   # 中文文档
 ├── README_EN.md                # 英文文档
 │

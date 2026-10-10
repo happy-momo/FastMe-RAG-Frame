@@ -7,7 +7,7 @@
 ## 前置条件
 
 - Python 3.10+
-- 已安装依赖：`pip install -r requirements.txt`
+- 已安装依赖：`pip install -e .`
 - 已配置环境变量（见下文）
 
 ---

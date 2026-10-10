@@ -51,8 +51,7 @@
 ```
 FASTME-RAG/
 ├── app_factory.py              # 主框架入口
-├── app.py                      # 使用示例
-├── requirements.txt            # Python 依赖
+├── pyproject.toml              # 打包与依赖（唯一权威源）
 ├── README.md                   # 项目说明
 ├── docs/                       # 文档目录
 │   ├── README.md               # 文档索引（本文件）
@@ -81,16 +80,16 @@ FASTME-RAG/
 
 ## 相关链接
 
-- [GitHub 仓库](https://github.com/happy-momo/FASTME-RAG)
-- [问题反馈](https://github.com/happy-momo/FASTME-RAG/issues)
+- [GitHub 仓库](https://github.com/happy-momo/FastMe-RAG-Frame)
+- [问题反馈](https://github.com/happy-momo/FastMe-RAG-Frame/issues)
 
 ---
 
 ## 版本信息
 
 - 文档版本：1.0
-- 最后更新：2024-01
-- 框架版本：见 requirements.txt
+- 最后更新：2026-10
+- 框架版本：见 pyproject.toml
 
 ---
 

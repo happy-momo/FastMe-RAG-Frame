@@ -7,7 +7,7 @@ This guide helps you get started with the FastMe RAG framework in 5 minutes.
 ## Prerequisites
 
 - Python 3.10+
-- Dependencies installed: `pip install -r requirements.txt`
+- Dependencies installed: `pip install -e .`
 - Environment variables configured (see below)
 
 ---

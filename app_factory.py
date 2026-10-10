@@ -34,7 +34,6 @@ FastMeRAG is a factory class responsible for:
 import os
 import copy
 import logging
-import yaml
 from pathlib import Path
 from typing import Optional, Dict, Any, Union
 

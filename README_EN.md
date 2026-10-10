@@ -102,10 +102,10 @@ The demo **does not modify framework source code at all**. It wraps FastMe RAG a
 ### 1. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
-> **💡 Dependency Note**: `requirements.txt` includes all dependencies needed by the framework, including `python-docx` (for DOCX document parsing, v1.1.0+).
+> **💡 Dependency Note**: `pyproject.toml` is the single source of truth for dependencies. `pip install -e .` installs all runtime deps, including `python-docx` (for DOCX parsing, v1.1.0+). For dev deps (tests/lint) use `pip install -e ".[dev]"`.
 
 ### 2. Configure Environment Variables
 
@@ -1981,8 +1981,7 @@ print(result["answer"])
 ```
 FASTME-RAG/
 ├── app_factory.py              # Main framework entry (FastMeRAG class)
-├── app.py                      # Usage examples
-├── requirements.txt            # Python dependencies
+├── pyproject.toml              # Packaging & dependencies (single source of truth)
 ├── README.md                   # Chinese documentation
 ├── README_EN.md                # English documentation
 │
