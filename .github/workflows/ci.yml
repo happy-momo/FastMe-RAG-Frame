@@ -21,11 +21,13 @@ jobs:
       - name: Install deps
         run: |
           pip install --upgrade pip
-          pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt
-          pip install ruff
+          pip install -e ".[dev]"
       - name: Lint
-        run: ruff check core/ splitters/ vector_stores/ retrievers/ routers/ adapters/ manufacturing/ config/ app_factory.py config/loader.py || true
-      - name: Tests (unit, mocks no-model)
-        run: pytest tests/ -v -m "not needs_model" -k "not test_vector_stores"
+        # 报告但不阻断(待全库 ruff 清理后去掉 continue-on-error)。Report but non-blocking.
+        continue-on-error: true
+        run: ruff check core/ splitters/ vector_stores/ retrievers/ routers/ adapters/ manufacturing/ config/ app_factory.py config/loader.py
+      - name: Tests
+        # 模型依赖用例由 conftest embeddings fixture / rag fixture 在缺模型时自动 SKIP(非报错)
+        run: pytest tests/ -v -m "not needs_model"
       - name: Version
         run: python -c "import app_factory; print(app_factory.__version__)"

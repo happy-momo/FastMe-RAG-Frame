@@ -30,6 +30,18 @@ dependencies = [
 ]
 dynamic = ["version"]
 
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.pytest.ini_options]
+markers = [
+    "needs_model: requires a real embedding model / LLM (skipped in CI)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
 [tool.setuptools.packages.find]
 include = [
     "core*", "splitters*", "vector_stores*", "retrievers*",

@@ -896,5 +896,11 @@ class FastMeRAG:
         self.vectorstore.delete_collection()
 
 
-# 版本号 / Version (由 setuptools-scm 从 git tag 生成;无 tag 时回退 fallback_version)
-__version__ = "0.1.0"
+# 版本号 / Version
+# 优先从已安装包元数据读取(setuptools-scm 生成的发行版本);未安装时回退静态值。
+# Prefer installed-package metadata (setuptools-scm build version); fall back to static.
+try:
+    from importlib.metadata import version as _pkg_version
+    __version__ = _pkg_version("fastme-rag")
+except Exception:  # PackageNotFoundError / not installed
+    __version__ = "0.1.0"
