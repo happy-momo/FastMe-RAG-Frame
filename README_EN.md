@@ -27,6 +27,10 @@
 
 This repository also provides a **ready-to-use RAG Chatbot service template** on the `chatbot-demo` branch. Built on the FastMe RAG framework with **Vue 3 + FastAPI + Docker Compose**, it fully demonstrates the framework's core capabilities and is ready for validation and secondary development.
 
+<img width="1907" height="861" alt="image" src="https://github.com/user-attachments/assets/47d53a28-869e-49fb-a69a-2781b6bd6c9f" />
+
+<img width="1891" height="880" alt="image" src="https://github.com/user-attachments/assets/f4c1e929-820f-4148-bae5-8567164e91b2" />
+
 | Feature | Description |
 |---------|-------------|
 | 💬 Streaming chat | SSE typewriter effect, first token appears immediately |
