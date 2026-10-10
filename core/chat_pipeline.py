@@ -21,6 +21,7 @@ Example:
 """
 
 import logging
+import threading
 from typing import Dict, Optional, Generator, Tuple, List
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
@@ -98,6 +99,8 @@ class ChatPipeline:
         self.memories: Dict[str, ConversationBufferWindowMemory] = {}
         # 保存每个会话的 max_turns 配置
         self.memory_configs: Dict[str, int] = {}
+        # 记忆并发锁(保护 memories / memory_configs 读写原子性)
+        self._lock = threading.RLock()
 
     def _resolve_top_k(
         self,
@@ -331,11 +334,12 @@ class ChatPipeline:
             session_id: 会话 ID / Session ID
             max_turns: 最大保留轮次 / Maximum turns to retain
         """
-        self.memories[session_id] = ConversationBufferWindowMemory(
-            k=max_turns,
-            return_messages=True
-        )
-        self.memory_configs[session_id] = max_turns
+        with self._lock:
+            self.memories[session_id] = ConversationBufferWindowMemory(
+                k=max_turns,
+                return_messages=True
+            )
+            self.memory_configs[session_id] = max_turns
 
     def get_memory(self, session_id: str) -> Optional[ConversationBufferWindowMemory]:
         """
@@ -348,7 +352,8 @@ class ChatPipeline:
         Returns:
             对话记忆对象，不存在则返回 None / Conversation memory object, or None if not found
         """
-        return self.memories.get(session_id)
+        with self._lock:
+            return self.memories.get(session_id)
 
     def clear_memory(self, session_id: str = None):
         """
@@ -358,12 +363,13 @@ class ChatPipeline:
         Args:
             session_id: 会话 ID，None 则清除所有 / Session ID, None clears all
         """
-        if session_id is not None:
-            self.memories.pop(session_id, None)
-            self.memory_configs.pop(session_id, None)
-        else:
-            self.memories.clear()
-            self.memory_configs.clear()
+        with self._lock:
+            if session_id is not None:
+                self.memories.pop(session_id, None)
+                self.memory_configs.pop(session_id, None)
+            else:
+                self.memories.clear()
+                self.memory_configs.clear()
 
     def chat_with_memory(
         self,
@@ -387,73 +393,75 @@ class ChatPipeline:
         Returns:
             dict: 对话结果，包含 question, scene, answer, sources / Conversation result containing question, scene, answer, sources
         """
-        # 如果没有记忆，创建一个新的
-        if session_id not in self.memories:
-            self.create_memory(session_id)
 
-        memory = self.memories[session_id]
+        with self._lock:
+            # 如果没有记忆，创建一个新的
+            if session_id not in self.memories:
+                self.create_memory(session_id)
 
-        # 1. 执行场景化检索
-        contexts, source_fields = self.scene_aware_retriever.retrieve(
-            question=question,
-            scene=scene,
-            filters=filters,
-            top_k=self._resolve_top_k(top_k, scene)
-        )
+            memory = self.memories[session_id]
 
-        # 2. 将检索结果格式化为用户 Prompt(经 max_context_length 截断)
-        user_prompt = self.prompt_adapter.build_user_prompt(question, contexts, source_fields)
-        user_prompt = self._truncate_context(user_prompt)
-
-        # 3. 获取场景配置和系统 Prompt
-        scene_config = self.scene_aware_retriever.scene_router.route(scene)
-        prompt_template_name = scene_config.get("prompt_template", "default")
-        system_prompt = self.prompt_adapter.get_system_prompt(prompt_template_name)
-
-        # 4. 加载历史对话，构建消息列表（消息列表方式，而非文本拼接）
-        history = memory.load_memory_variables({})
-        history_messages = history.get("history", [])
-
-        messages = [SystemMessage(content=system_prompt)]
-
-        # 插入历史消息（ConversationBufferWindowMemory 的 k 参数已自动限制窗口大小）
-        for msg in history_messages:
-            messages.append(msg)
-
-        # 添加当前用户消息
-        messages.append(HumanMessage(content=user_prompt))
-
-        # 5. 调用 LLM
-        answer = self.llm.invoke(messages).content
-
-        # 处理空回答
-        fallback_used = False
-        if not answer or not answer.strip():
-            answer = "抱歉，未能生成有效回答，请尝试换一种方式提问。"
-            fallback_used = True
-            logger.warning(f"[问答] LLM 返回空回答，question='{question}'")
-
-        # [必须] 问答完成信息
-        answer_preview = answer[:100].replace('\n', '\\n') if answer else ""
-        logger.info(f"[问答] 回答完成：answer 预览='{answer_preview}...', 溯源数={len(contexts)}")
-
-        # 6. 构建溯源信息
-        sources = self._build_sources(contexts, source_fields)
-
-        # 7. 保存记忆
-        #    仅当 LLM 正常返回时保存；空回答的兜底文本不入记忆，避免污染后续多轮上下文
-        #    Save only when the LLM returned a valid answer; the fallback text for empty
-        #    answers is not saved to avoid polluting subsequent multi-turn context
-        if not fallback_used:
-            memory.save_context(
-                {"input": question},
-                {"output": answer}
+            # 1. 执行场景化检索
+            contexts, source_fields = self.scene_aware_retriever.retrieve(
+                question=question,
+                scene=scene,
+                filters=filters,
+                top_k=self._resolve_top_k(top_k, scene)
             )
 
-        return {
-            "question": question,
-            "scene": scene,
-            "filters": filters,
-            "answer": answer,
-            "sources": sources
-        }
+            # 2. 将检索结果格式化为用户 Prompt(经 max_context_length 截断)
+            user_prompt = self.prompt_adapter.build_user_prompt(question, contexts, source_fields)
+            user_prompt = self._truncate_context(user_prompt)
+
+            # 3. 获取场景配置和系统 Prompt
+            scene_config = self.scene_aware_retriever.scene_router.route(scene)
+            prompt_template_name = scene_config.get("prompt_template", "default")
+            system_prompt = self.prompt_adapter.get_system_prompt(prompt_template_name)
+
+            # 4. 加载历史对话，构建消息列表（消息列表方式，而非文本拼接）
+            history = memory.load_memory_variables({})
+            history_messages = history.get("history", [])
+
+            messages = [SystemMessage(content=system_prompt)]
+
+            # 插入历史消息（ConversationBufferWindowMemory 的 k 参数已自动限制窗口大小）
+            for msg in history_messages:
+                messages.append(msg)
+
+            # 添加当前用户消息
+            messages.append(HumanMessage(content=user_prompt))
+
+            # 5. 调用 LLM
+            answer = self.llm.invoke(messages).content
+
+            # 处理空回答
+            fallback_used = False
+            if not answer or not answer.strip():
+                answer = "抱歉，未能生成有效回答，请尝试换一种方式提问。"
+                fallback_used = True
+                logger.warning(f"[问答] LLM 返回空回答，question='{question}'")
+
+            # [必须] 问答完成信息
+            answer_preview = answer[:100].replace('\n', '\\n') if answer else ""
+            logger.info(f"[问答] 回答完成：answer 预览='{answer_preview}...', 溯源数={len(contexts)}")
+
+            # 6. 构建溯源信息
+            sources = self._build_sources(contexts, source_fields)
+
+            # 7. 保存记忆
+            #    仅当 LLM 正常返回时保存；空回答的兜底文本不入记忆，避免污染后续多轮上下文
+            #    Save only when the LLM returned a valid answer; the fallback text for empty
+            #    answers is not saved to avoid polluting subsequent multi-turn context
+            if not fallback_used:
+                memory.save_context(
+                    {"input": question},
+                    {"output": answer}
+                )
+
+            return {
+                "question": question,
+                "scene": scene,
+                "filters": filters,
+                "answer": answer,
+                "sources": sources
+            }
