@@ -59,9 +59,8 @@ source venv/bin/activate  # Linux/Mac
 # 或
 venv\Scripts\activate     # Windows
 
-# 4. 安装依赖
-pip install -r requirements.txt
-pip install -r requirements-test.txt
+# 4. 安装依赖（含开发依赖）
+pip install -e ".[dev]"
 
 # 5. 运行测试
 pytest tests/ -v
@@ -182,6 +181,20 @@ pytest tests/test_scene_router.py -v
 # 运行单个测试用例
 pytest tests/test_scene_router.py::TestSceneRouter::test_route_exists -v
 ```
+
+### 运行测试与 CI 检查
+
+本项目已接入 GitHub Actions（`.github/workflows/ci.yml`）。推送到 GitHub 后，PR 会自动触发 **pytest + ruff + 版本检查**。提交 PR 前请在本地跑一遍：
+
+```bash
+pip install -e .        # 安装本地包（含 __version__）
+# 纯逻辑单测（不加载真实 bge-m3 模型，CI 同款）
+pytest tests/ -v -m "not needs_model" -k "not test_vector_stores"
+# Lint（CI 同款）
+ruff check core/ splitters/ vector_stores/ retrievers/ routers/ adapters/ manufacturing/ config/ app_factory.py config/loader.py
+```
+
+> 说明：`test_vector_stores` 与 `needs_model` 测试需要真实 embedding 模型 / LLM，CI 默认跳过；请确保本地两个命令无报错后再提交。
 
 ## Pull Request 指南
 

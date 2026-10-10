@@ -8,7 +8,7 @@ Manages Prompt templates and field labels, supporting multi-language switching.
 
 import logging
 import yaml
-from typing import Dict, Optional
+from typing import Dict
 
 logger = logging.getLogger("fastme_rag")
 

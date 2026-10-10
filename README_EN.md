@@ -1,8 +1,8 @@
 # FastMe RAG
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-89%20passed-green.svg)]()
+[![CI](https://img.shields.io/github/actions/workflow/status/happy-momo/FastMe-RAG-Frame/ci.yml?branch=frame-0.1)](https://github.com/happy-momo/FastMe-RAG-Frame/actions)
 
 **FastMe RAG** is a lightweight, pluggable RAG (Retrieval-Augmented Generation) framework designed for the manufacturing industry. It's built for factory equipment manuals, operation logs, workshop work orders, and process SOPs, providing scenario-based Q&A and automatic industrial metadata extraction.
 
@@ -12,62 +12,48 @@
 
 ## 🚀 Chatbot Demo Template (`chatbot-demo` branch)
 
-> The `chatbot-demo` branch provides a ready-to-use RAG Chatbot service with **Vue 3 frontend + FastAPI backend + Docker Compose one-click deployment**, fully demonstrating the core capabilities of the FastMe RAG framework.
+This repository includes a **ready-to-use RAG Chatbot service template** on the `chatbot-demo` branch. Built on FastMe RAG framework with **Vue 3 + FastAPI + Docker Compose**, it fully demonstrates the framework's core capabilities and is ready for validation and secondary development.
 
-### ✨ Features
+### ✨ Demo Features
 
 | Feature | Description |
 |---------|-------------|
-| 💬 **Streaming Chat** | SSE streaming output with typewriter effect, real-time response visibility |
-| 🎯 **4 Scenarios** | Fault Diagnosis / Manual Query / Work Order Trace / Default Q&A, scenario-based retrieval & prompts |
-| 🔍 **Source Tracing** | Similarity progress bars, colored tags, metadata details — answer sources at a glance |
-| 📄 **Document Ingestion** | Drag & drop upload, type selection, real-time progress, 4-step ingestion flow visualization |
-| 💾 **Multi-Session Memory** | Create multiple independent sessions, each preserving its chat history |
-| 📊 **LLM Status Monitor** | Real-time LLM connection status display in the header (pulse indicator + Tooltip) |
-| 🎨 **Modern UI** | Gradient color scheme, card design, smooth animations, responsive layout |
+| 💬 **Streaming Chat** | SSE streaming output with typewriter effect |
+| 🎯 **4 Scenarios** | Fault diagnosis / manual query / work order trace / default Q&A |
+| 🔍 **Source Tracing** | Similarity progress bars, colored tags, metadata details |
+| 📄 **Document Ingestion** | Drag & drop upload, type selection, 4-step flow visualization |
+| 💾 **Multi-Session Memory** | Independent history for multiple sessions |
+| 📊 **LLM Status Monitor** | Real-time connection status indicator |
+| 🎨 **Modern UI** | Gradient color scheme, card design, smooth animations |
 
 ### 🚀 Quick Start
 
-#### Option 1: Docker Compose (Recommended)
-
 ```bash
-# 1. Clone and switch to the demo branch
-git clone https://github.com/your-org/FastMe-RAG-Frame.git
+# 1. Clone the repository
+git clone https://github.com/happy-momo/FastMe-RAG-Frame.git
 cd FastMe-RAG-Frame
+
+# 2. Switch to chatbot-demo branch
 git checkout chatbot-demo
 
-# 2. Configure environment variables
+# 3. Configure LLM
 cp .env.example .env
-# Edit .env with your LLM endpoint
+# Edit .env with your OpenAI-compatible LLM endpoint
 
-# 3. One-click start
+# 4. One-click start
 docker compose up -d
 
-# 4. Access
-# Frontend: http://localhost:8080
-# Backend API: http://localhost:8000
-# API Docs: http://localhost:8000/docs
+# 5. Access
+# Frontend:  http://localhost:8080
+# Backend:   http://localhost:8000
+# API Docs:  http://localhost:8000/docs
 ```
 
-#### Option 2: Local Development
+> **💡 Local Development**: See docs on the `chatbot-demo` branch for detailed instructions.
 
-```bash
-# Backend
-pip install -r requirements.txt -r backend/requirements.txt
-PYTHONPATH="$PWD:$PWD/backend" uvicorn app.main:app --host 0.0.0.0 --port 8000
+### 🏗️ Relationship with the Framework
 
-# Frontend
-cd frontend
-npm install
-npm run dev
-# Visit http://localhost:5173
-```
-
-### 🏗️ Architecture
-
-The demo **does not modify framework source code at all**. It wraps FastMe RAG as an HTTP service through a `RAGManager` singleton with thread-lock serialization. Streaming answers are orchestrated at the application layer by reusing framework components (retriever / prompt / llm / memory) to combine streaming output with conversation memory.
-
-See [CHATBOT_DEMO.md](CHATBOT_DEMO.md) for details.
+The demo **does not modify framework source code at all**. It wraps FastMe RAG as an HTTP service through a `RAGManager` singleton with thread-lock serialization.
 
 ---
 
@@ -116,10 +102,10 @@ See [CHATBOT_DEMO.md](CHATBOT_DEMO.md) for details.
 ### 1. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
-> **💡 Dependency Note**: `requirements.txt` includes all dependencies needed by the framework, including `python-docx` (for DOCX document parsing, v1.1.0+).
+> **💡 Dependency Note**: `pyproject.toml` is the single source of truth for dependencies. `pip install -e .` installs all runtime deps, including `python-docx` (for DOCX parsing, v1.1.0+). For dev deps (tests/lint) use `pip install -e ".[dev]"`.
 
 ### 2. Configure Environment Variables
 
@@ -1995,8 +1981,7 @@ print(result["answer"])
 ```
 FASTME-RAG/
 ├── app_factory.py              # Main framework entry (FastMeRAG class)
-├── app.py                      # Usage examples
-├── requirements.txt            # Python dependencies
+├── pyproject.toml              # Packaging & dependencies (single source of truth)
 ├── README.md                   # Chinese documentation
 ├── README_EN.md                # English documentation
 │

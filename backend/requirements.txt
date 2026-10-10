@@ -1,6 +1,6 @@
 # FastMe RAG Chatbot Demo - Backend 服务依赖
-# 仅包含服务层依赖；框架依赖由仓库根 requirements.txt 安装
-# Demo service deps; framework deps are installed from repo-root requirements.txt
+# 仅包含服务层依赖；框架依赖由仓库根 pyproject.toml 安装
+# Demo service deps; framework deps are installed from repo-root pyproject.toml
 
 fastapi>=0.110
 uvicorn[standard]>=0.29

@@ -34,7 +34,6 @@ FastMeRAG is a factory class responsible for:
 import os
 import copy
 import logging
-import yaml
 from pathlib import Path
 from typing import Optional, Dict, Any, Union
 
@@ -205,6 +204,9 @@ class FastMeRAG:
             self.config = self._load_config_from_env_or_default()
         else:
             self.config = self._load_config(config)
+
+        # 1.5 校验配置契约(非法配置立即报错) / Validate config contract (invalid -> fail fast)
+        ConfigLoader._validate_config(self.config)
 
         # 2. 创建核心组件 / Create core components
         self.embeddings = self._create_embeddings()
@@ -886,8 +888,18 @@ class FastMeRAG:
 
         Example:
             >>> rag.delete_collection()  # 删除所有向量数据 / Delete all vector data
+
+        Raises:
+            Exception: 底层向量库删除失败时向上抛出(不静默吞异常)
         """
-        try:
-            self.vectorstore.delete_collection()
-        except Exception:
-            pass
+        self.vectorstore.delete_collection()
+
+
+# 版本号 / Version
+# 优先从已安装包元数据读取(setuptools-scm 生成的发行版本);未安装时回退静态值。
+# Prefer installed-package metadata (setuptools-scm build version); fall back to static.
+try:
+    from importlib.metadata import version as _pkg_version
+    __version__ = _pkg_version("fastme-rag")
+except Exception:  # PackageNotFoundError / not installed
+    __version__ = "0.1.0"

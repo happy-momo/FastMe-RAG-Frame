@@ -6,8 +6,10 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # 安装框架 + 服务依赖 / Install framework + service deps
+# 框架依赖以 pyproject.toml 为权威源，pip install . 安装全部运行时依赖
+# Framework deps are sourced from pyproject.toml; `pip install .` installs all runtime deps
 COPY . /app
-RUN pip install --no-cache-dir -r requirements.txt \
+RUN pip install --no-cache-dir . \
  && pip install --no-cache-dir -r backend/requirements.txt
 
 ENV PYTHONPATH=/app:/app/backend

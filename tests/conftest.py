@@ -17,9 +17,12 @@ def embeddings():
     """
     创建 Embedding 函数（会话级共享）
 
-    使用本地模型路径，避免重复下载。
+    使用本地模型路径，避免重复下载；模型不存在时跳过（如 CI 的 fresh checkout），
+    避免报 Error。本地已下载 `models/bge-m3` 时这些用例正常运行。
     """
     model_path = Path(__file__).parent.parent / "models" / "bge-m3"
+    if not (model_path / "pytorch_model.bin").exists():
+        pytest.skip("本地 Embedding 模型不存在（需下载 models/bge-m3），跳过真模型测试")
     return HuggingFaceEmbeddings(
         model_name=str(model_path),
         model_kwargs={"device": "cpu", "trust_remote_code": True},

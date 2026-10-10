@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "setuptools-scm[toml]>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fastme-rag"
+description = "Manufacturing-specific, pluggable RAG framework (FastMe RAG)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "gail peng" }]
+dependencies = [
+    "langchain-classic==1.0.8",
+    "langchain-core>=1.0.0",
+    "langchain-openai>=0.2.0",
+    "langchain-huggingface>=1.0.0",
+    "langchain-community>=0.4.0",
+    "langchain-chroma>=1.1.0",
+    "langchain-text-splitters>=1.0.0",
+    "sentence-transformers==4.1.0",
+    "transformers==4.52.4",
+    "huggingface-hub==0.36.2",
+    "chromadb==1.5.9",
+    "faiss-cpu==1.14.3",
+    "pypdf==6.14.2",
+    "python-docx>=1.1.0",
+    "python-dotenv==1.2.2",
+    "PyYAML==6.0.3",
+    "pydantic==2.13.4",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.pytest.ini_options]
+markers = [
+    "needs_model: requires a real embedding model / LLM (skipped in CI)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.setuptools.packages.find]
+include = [
+    "core*", "splitters*", "vector_stores*", "retrievers*",
+    "routers*", "adapters*", "manufacturing*", "config*",
+]
+exclude = ["tests*", "examples*", "docs*", "backend*", "frontend*"]
+
+[tool.setuptools]
+py-modules = ["app_factory"]
+
+[tool.setuptools_scm]
+fallback_version = "0.1.0"

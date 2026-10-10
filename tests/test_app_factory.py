@@ -62,6 +62,8 @@ def rag():
         })
     except ImportError as e:
         pytest.skip(f"无法导入 FastMeRAG: {e}")
+    except Exception as e:  # noqa: BLE001 - 模型下载/网络失败时跳过而非报错
+        pytest.skip(f"初始化 FastMeRAG 失败(缺模型/网络): {e}")
 
 
 class TestFastMeRAGFromConfig:
@@ -70,6 +72,7 @@ class TestFastMeRAGFromConfig:
     FastMeRAG configuration loading tests
     """
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_from_config_yaml(self):
         """
         测试从 YAML 配置文件加载
@@ -99,6 +102,7 @@ llm:
 
             Path(f.name).unlink()
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_from_config_dict(self):
         """
         测试从配置字典加载
@@ -121,6 +125,7 @@ llm:
         assert rag.config['vector_store']['type'] == 'chroma'
         assert rag.config['vector_store']['config']['collection_name'] == 'test_dict_coll'
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_from_config_with_overrides(self):
         """
         测试从配置加载并覆盖
@@ -152,6 +157,7 @@ llm:
 
             Path(f.name).unlink()
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_from_config_faiss(self):
         """
         测试从 FAISS 配置加载
@@ -187,6 +193,7 @@ class TestChunkingConfig:
     Chunking configuration tests
     """
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_chunking_by_type(self):
         """
         测试按类型配置 chunk 大小
@@ -226,6 +233,7 @@ chunking:
 
             Path(f.name).unlink()
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_chunking_default_values(self):
         """
         测试使用 Splitter 类默认值
@@ -328,6 +336,7 @@ class TestFastMeRAGInit:
     FastMeRAG initialization tests
     """
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_init_default(self):
         """测试默认初始化 / Test default initialization"""
         try:
@@ -578,6 +587,22 @@ class TestFastMeRAGBatchIngest:
         assert len(results) == 2  # 2 个.log 文件 / 2 .log files
         success_count = sum(1 for r in results if r["status"] == "success")
         assert success_count == 2
+
+
+class TestDeleteCollectionContract:
+    """delete_collection 错误处理契约：不静默吞异常"""
+
+    def test_delete_collection_raises_on_adapter_failure(self):
+        from app_factory import FastMeRAG
+        rag = FastMeRAG.__new__(FastMeRAG)  # 跳过重量级初始化
+
+        class BoomAdapter:
+            def delete_collection(self):
+                raise RuntimeError("adapter broken")
+
+        rag.vectorstore = BoomAdapter()
+        with pytest.raises(RuntimeError, match="adapter broken"):
+            rag.delete_collection()
 
 
 if __name__ == "__main__":
