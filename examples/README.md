@@ -63,6 +63,19 @@ python examples/custom_config.py
 python examples/config_usage.py
 ```
 
+### 5. smoke_test.py - 手动端到端冒烟测试
+手动运行的多轮对话/入库/记忆冒烟测试。需满足：
+- 已配置 `.env`（LLM 端点 + API Key）
+- `files/` 目录存在且有测试文档
+- embedding 与 LLM 可用（会真实调用）
+
+**运行**：
+```bash
+python examples/smoke_test.py
+```
+
+> 注意：此脚本为**手动冒烟工具**(非单元测试),依赖真实 embedding/LLM/`files/` 目录;CI 不运行它。其主要逻辑已被 `tests/test_fixes_p0_p1.py` 的 mock 版单元测试覆盖。
+
 ## 前置准备
 
 1. **安装依赖**
