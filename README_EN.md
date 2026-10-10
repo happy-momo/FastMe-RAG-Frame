@@ -1,8 +1,8 @@
 # FastMe RAG
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-89%20passed-green.svg)]()
+[![CI](https://img.shields.io/github/actions/workflow/status/happy-momo/FastMe-RAG-Frame/ci.yml?branch=frame-0.1)](https://github.com/happy-momo/FastMe-RAG-Frame/actions)
 
 **FastMe RAG** is a lightweight, pluggable RAG (Retrieval-Augmented Generation) framework designed for the manufacturing industry. It's built for factory equipment manuals, operation logs, workshop work orders, and process SOPs, providing scenario-based Q&A and automatic industrial metadata extraction.
 

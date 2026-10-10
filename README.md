@@ -1,8 +1,8 @@
 # FastMe RAG
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Tests](https://img.shields.io/badge/tests-89%20passed-green.svg)]()
+[![CI](https://img.shields.io/github/actions/workflow/status/happy-momo/FastMe-RAG-Frame/ci.yml?branch=frame-0.1)](https://github.com/happy-momo/FastMe-RAG-Frame/actions)
 
 **FastMe RAG** 是一个面向制造业的轻量化、可插拔 RAG（检索增强生成）框架。专为工厂设备手册、运维日志、车间工单、工艺 SOP 等制造业文档设计，提供场景化问答和工业元数据自动抽取能力。
 
@@ -104,6 +104,13 @@ The demo **does not modify framework source code at all**. It wraps FastMe RAG a
 ---
 
 ## 📦 快速开始
+
+> 💡 **作为库安装 / Install as a library**：可 `pip install` 本项目（含全部运行时依赖）后直接 `from app_factory import FastMeRAG`。
+> ```bash
+> pip install -e .                        # 本地可编辑安装 / editable install
+> # 或从 Git 安装 / or from git:
+> pip install git+https://github.com/happy-momo/FastMe-RAG-Frame.git
+> ```
 
 ### 1. 安装依赖
 
