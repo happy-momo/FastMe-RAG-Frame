@@ -72,6 +72,7 @@ class TestFastMeRAGFromConfig:
     FastMeRAG configuration loading tests
     """
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_from_config_yaml(self):
         """
         测试从 YAML 配置文件加载
@@ -101,6 +102,7 @@ llm:
 
             Path(f.name).unlink()
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_from_config_dict(self):
         """
         测试从配置字典加载
@@ -123,6 +125,7 @@ llm:
         assert rag.config['vector_store']['type'] == 'chroma'
         assert rag.config['vector_store']['config']['collection_name'] == 'test_dict_coll'
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_from_config_with_overrides(self):
         """
         测试从配置加载并覆盖
@@ -154,6 +157,7 @@ llm:
 
             Path(f.name).unlink()
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_from_config_faiss(self):
         """
         测试从 FAISS 配置加载
@@ -189,6 +193,7 @@ class TestChunkingConfig:
     Chunking configuration tests
     """
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_chunking_by_type(self):
         """
         测试按类型配置 chunk 大小
@@ -228,6 +233,7 @@ chunking:
 
             Path(f.name).unlink()
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_chunking_default_values(self):
         """
         测试使用 Splitter 类默认值
@@ -330,6 +336,7 @@ class TestFastMeRAGInit:
     FastMeRAG initialization tests
     """
 
+    @pytest.mark.needs_model  # 直接构造 FastMeRAG,需真实 embedding 模型(CI 由 -m not needs_model 排除)
     def test_init_default(self):
         """测试默认初始化 / Test default initialization"""
         try:

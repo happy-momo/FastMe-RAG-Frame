@@ -11,6 +11,10 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.10", "3.11"]
+    env:
+      # 离线模式:禁止 CI 下载 embedding 模型(fail-fast,避免 1.2GB 下载挂起)
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
     steps:
       - uses: actions/checkout@v4
         with:
