@@ -27,6 +27,10 @@
 
 本仓库同时提供一个**开箱即用的 RAG Chatbot 服务模板**，位于 `chatbot-demo` 分支。它基于 FastMe RAG 框架，使用 **Vue 3 + FastAPI + Docker Compose** 构建，完整演示框架核心能力，可直接用于验证和二次开发。
 
+<img width="1907" height="861" alt="image" src="https://github.com/user-attachments/assets/47d53a28-869e-49fb-a69a-2781b6bd6c9f" />
+
+<img width="1891" height="880" alt="image" src="https://github.com/user-attachments/assets/f4c1e929-820f-4148-bae5-8567164e91b2" />
+
 | 功能 | 说明 |
 |------|------|
 | 💬 流式对话 | SSE 打字机效果，首字即出 |
