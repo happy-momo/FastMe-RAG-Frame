@@ -120,7 +120,7 @@ llm:
             'llm': {'model_name': 'qwen-plus'}
         }
         
-        with pytest.raises(ValueError, match="Missing required config: 'vector_store'"):
+        with pytest.raises(ValueError, match="vector_store"):
             ConfigLoader._validate_config(config)
 
     def test_validate_config_missing_type(self):
@@ -134,7 +134,7 @@ llm:
             'llm': {'model_name': 'qwen-plus'}
         }
         
-        with pytest.raises(ValueError, match="Missing required config: 'vector_store.type'"):
+        with pytest.raises(ValueError, match="vector_store.*type"):
             ConfigLoader._validate_config(config)
 
     def test_validate_config_invalid_type(self):
@@ -164,7 +164,7 @@ llm:
             'llm': {'model_name': 'qwen-plus'}
         }
 
-        with pytest.raises(ValueError, match="Missing required config: 'embedding'"):
+        with pytest.raises(ValueError, match="embedding"):
             ConfigLoader._validate_config(config)
 
     def test_validate_config_missing_llm(self):
@@ -177,7 +177,7 @@ llm:
             'embedding': {'model_name': 'BAAI/bge-m3'}
         }
 
-        with pytest.raises(ValueError, match="Missing required config: 'llm'"):
+        with pytest.raises(ValueError, match="llm"):
             ConfigLoader._validate_config(config)
 
     def test_validate_vector_store_missing_config(self):

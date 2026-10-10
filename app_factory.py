@@ -206,6 +206,9 @@ class FastMeRAG:
         else:
             self.config = self._load_config(config)
 
+        # 1.5 校验配置契约(非法配置立即报错) / Validate config contract (invalid -> fail fast)
+        ConfigLoader._validate_config(self.config)
+
         # 2. 创建核心组件 / Create core components
         self.embeddings = self._create_embeddings()
         self.vectorstore = self._create_vectorstore()
